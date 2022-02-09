@@ -1,8 +1,8 @@
 Source: tensorflow
-Maintainer: Debian Deep Learning Team <debian-science-maintainers@lists.alioth.debian.org>
+Maintainer: Debian Deep Learning Team <debian-ai@lists.debian.org>
 Uploaders: Michael R. Crusoe <crusoe@debian.org>,
            Andreas Tille <tille@debian.org>,
-	   Wookey <wookey@debian.org>
+           Wookey <wookey@debian.org>
 Section: science
 Priority: optional
 Build-Depends: debhelper-compat (= 13),
