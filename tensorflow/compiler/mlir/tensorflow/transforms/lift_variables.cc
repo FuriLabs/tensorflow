@@ -27,8 +27,9 @@ limitations under the License.
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/IR/Builders.h"  // from @llvm-project
-#include "mlir/IR/Module.h"  // from @llvm-project
+#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
 #include "mlir/IR/UseDefLists.h"  // from @llvm-project
 #include "mlir/Support/LLVM.h"  // from @llvm-project
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
@@ -67,7 +68,6 @@ LogicalResult LiftVariablesFromSession(
     ModuleOp module, Session* session,
     const SmallSet<StringRef, 4>& resource_names) {
   OpBuilder builder(module.getBodyRegion());
-  MLIRContext* context = module.getContext();
 
   if (!session) return module.emitOpError() << "no session provided";
 
@@ -79,10 +79,10 @@ LogicalResult LiftVariablesFromSession(
   std::vector<Tensor> resource_tensors;
   Status status = session->Run(
       /*inputs=*/{}, variable_names,
-      /*target_node_names=*/{}, &resource_tensors);
+      /*target_tensor_names=*/{}, &resource_tensors);
   if (!status.ok()) {
     return module.emitOpError()
-           << "failed to run the provided session: " << status.error_message();
+           << "failed to run the provided session: " << status.message();
   }
 
   const DeviceMgr* device_manager;
@@ -134,10 +134,10 @@ LogicalResult LiftVariablesFromSession(
       return module.emitOpError()
              << "failed to convert tensor (name: " << name.str() << ")";
     }
-    ElementsAttr tensor_attr = tensor_attr_or.ValueOrDie();
+    ElementsAttr tensor_attr = tensor_attr_or.value();
 
     builder.create<tf_saved_model::GlobalTensorOp>(
-        NameLoc::get(builder.getIdentifier(name.str()), context),
+        NameLoc::get(builder.getStringAttr(name.str())),
         builder.getStringAttr(name), tensor_attr,
         TypeAttr::get(tensor_attr.getType()), builder.getUnitAttr());
   }
@@ -150,11 +150,11 @@ LogicalResult LiftVariablesFromSession(
 LogicalResult LiftVariables(ModuleOp module, Session* session) {
   MLIRContext* context = module.getContext();
   mlir::Builder builder(context);
-  Identifier resource_name_id = builder.getIdentifier(kResourceNameArgAttr);
+  StringAttr resource_name_id = builder.getStringAttr(kResourceNameArgAttr);
 
   SmallSet<StringRef, 4> resource_names;
 
-  for (FuncOp func : module.getOps<FuncOp>()) {
+  for (func::FuncOp func : module.getOps<func::FuncOp>()) {
     for (int i = 0, e = func.getNumArguments(); i < e; ++i) {
       auto resource_arg =
           func.getArgAttrOfType<StringAttr>(i, kResourceNameArgAttr);
@@ -162,7 +162,7 @@ LogicalResult LiftVariables(ModuleOp module, Session* session) {
 
       StringRef resource_name = resource_arg.getValue();
       auto flat_symbol_ref_attr =
-          FlatSymbolRefAttr::get(resource_name, context);
+          FlatSymbolRefAttr::get(context, resource_name);
 
       // Add the corresponding `tf_saved_model.bound_input` attribute.
       func.setArgAttr(i, kSavedModelArgAttr, flat_symbol_ref_attr);
@@ -176,7 +176,48 @@ LogicalResult LiftVariables(ModuleOp module, Session* session) {
 
   if (resource_names.empty()) return success();
 
-  return LiftVariablesFromSession(module, session, resource_names);
+  if (failed(LiftVariablesFromSession(module, session, resource_names)))
+    return failure();
+
+  // Now that we have all global tensors created, we set the corresponding
+  // bound_inputs' types correctly.
+  SymbolTable symbol_table(module);
+  for (auto func : module.getOps<func::FuncOp>()) {
+    for (auto arg : func.getArguments()) {
+      unsigned arg_number = arg.getArgNumber();
+      auto global_tensor = LookupBoundInputOfType<GlobalTensorOp>(
+          func, arg_number, symbol_table);
+      if (!global_tensor) continue;
+
+      auto arg_type = arg.getType().cast<RankedTensorType>();
+      assert(arg_type.getRank() == 0);
+      llvm::ArrayRef<TensorType> underlying_type =
+          arg_type.getElementType().cast<TF::ResourceType>().getSubtypes();
+
+      // If the arg type already matches the global_tensor type, we don't need
+      // to do anything.
+      if (!underlying_type.empty() &&
+          underlying_type[0] == global_tensor.getType()) {
+        assert(underlying_type.size() == 1);
+        continue;
+      }
+
+      // Otherwise, set this argument's type to the global_tensor's type.
+      auto new_arg_type = mlir::RankedTensorType::get(
+          /*shape=*/{},
+          mlir::TF::ResourceType::get(
+              /*subtypes=*/{global_tensor.getType().cast<TensorType>()},
+              module.getContext()));
+
+      arg.setType(new_arg_type);
+    }
+
+    // Update the function type.
+    func.setType(mlir::FunctionType::get(module.getContext(),
+                                         func.getBody().getArgumentTypes(),
+                                         func.getFunctionType().getResults()));
+  }
+  return success();
 }
 
 }  // namespace tf_saved_model

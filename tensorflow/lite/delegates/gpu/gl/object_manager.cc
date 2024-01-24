@@ -15,6 +15,9 @@ limitations under the License.
 
 #include "tensorflow/lite/delegates/gpu/gl/object_manager.h"
 
+#include <memory>
+#include <utility>
+
 #include "absl/memory/memory.h"
 #include "absl/types/span.h"
 #include "tensorflow/lite/delegates/gpu/common/convert.h"
@@ -40,19 +43,18 @@ absl::Status CreatePHWC4BufferFromTensorRef(const TensorRef<BHWC>& tensor_ref,
 
 absl::Status CopyFromPHWC4Buffer(const GlBuffer& buffer,
                                  TensorFloat32* tensor) {
-  return buffer.MappedRead<float>(
-      [tensor, &buffer](absl::Span<const float> data) {
-        tensor->data.resize(tensor->shape.DimensionsProduct());
-        return ConvertFromPHWC4(absl::MakeConstSpan(data), tensor->shape,
-                                absl::MakeSpan(tensor->data));
-      });
+  return buffer.MappedRead<float>([tensor](absl::Span<const float> data) {
+    tensor->data.resize(tensor->shape.DimensionsProduct());
+    return ConvertFromPHWC4(absl::MakeConstSpan(data), tensor->shape,
+                            absl::MakeSpan(tensor->data));
+  });
 }
 
 absl::Status ObjectManager::RegisterBuffer(uint32_t id, GlBuffer buffer) {
   if (id >= buffers_.size()) {
     buffers_.resize(id + 1);
   }
-  buffers_[id] = absl::make_unique<GlBuffer>(std::move(buffer));
+  buffers_[id] = std::make_unique<GlBuffer>(std::move(buffer));
   return absl::OkStatus();
 }
 
@@ -70,7 +72,7 @@ absl::Status ObjectManager::RegisterTexture(uint32_t id, GlTexture texture) {
   if (id >= textures_.size()) {
     textures_.resize(id + 1);
   }
-  textures_[id] = absl::make_unique<GlTexture>(std::move(texture));
+  textures_[id] = std::make_unique<GlTexture>(std::move(texture));
   return absl::OkStatus();
 }
 

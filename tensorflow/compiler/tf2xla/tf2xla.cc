@@ -30,7 +30,7 @@ limitations under the License.
 #include "tensorflow/compiler/tf2xla/tf2xla_util.h"
 #include "tensorflow/compiler/tf2xla/xla_compiler.h"
 #include "tensorflow/compiler/tf2xla/xla_op_registry.h"
-#include "tensorflow/compiler/xla/client/xla_computation.h"
+#include "xla/client/xla_computation.h"
 #include "tensorflow/core/common_runtime/function.h"
 #include "tensorflow/core/framework/function.h"
 #include "tensorflow/core/framework/graph.pb.h"
@@ -73,8 +73,6 @@ Status ConvertGraphToXla(std::unique_ptr<Graph> graph,
   compiler_options.flib_def = &graph->flib_def();
   compiler_options.graph_def_version = graph->versions().producer();
   compiler_options.allow_cpu_custom_calls = true;
-  compiler_options.custom_fake_quant_op_calls =
-      config.conversion_options().custom_fake_quant_op_calls();
 
   XlaCompiler compiler(compiler_options);
 
@@ -87,7 +85,7 @@ Status ConvertGraphToXla(std::unique_ptr<Graph> graph,
   *computation = std::move(*result.computation);
 
   int num_const_results = 0;
-  for (int i = 0; i < result.outputs.size(); ++i) {
+  for (int i = 0, end = result.outputs.size(); i < end; ++i) {
     // Ending up with const results (i.e. output args) is an error, since it
     // means that one or more fetches that the user specified will be dropped
     // from the generated function.  It's most likely a configuration error,
@@ -115,7 +113,7 @@ Status ConvertGraphToXla(std::unique_ptr<Graph> graph,
     for (const XlaCompiler::ResourceUpdate& update : result.resource_updates) {
       updated_inputs[update.input_index] = true;
     }
-    int64 input_index = xla_args.size() - config.variable_size();
+    int64_t input_index = xla_args.size() - config.variable_size();
     for (const tf2xla::Variable& variable : config.variable()) {
       if (variable.readonly() == updated_inputs[input_index]) {
         return errors::InvalidArgument(
@@ -127,7 +125,7 @@ Status ConvertGraphToXla(std::unique_ptr<Graph> graph,
       ++input_index;
     }
   }
-  return Status::OK();
+  return OkStatus();
 }
 
 Status ConvertVarHandlesToAotVarHandles(GraphDef* graph_def) {
@@ -137,14 +135,13 @@ Status ConvertVarHandlesToAotVarHandles(GraphDef* graph_def) {
       const auto& it = node.attr().find("allowed_devices");
       if (it != node.attr().end()) {
         if (!it->second.list().s().empty()) {
-          // TODO(b/149512838): Support non-empty allowed devices.
           return errors::InvalidArgument(
               "VarHandleOp with non-empty allowed devices is not supported.");
         }
         node.mutable_attr()->erase("allowed_devices");
       }
     }
-    return Status::OK();
+    return OkStatus();
   };
   for (auto& node : *graph_def->mutable_node()) {
     TF_RETURN_IF_ERROR(update_var_handle_op_node(node));
@@ -154,7 +151,7 @@ Status ConvertVarHandlesToAotVarHandles(GraphDef* graph_def) {
       TF_RETURN_IF_ERROR(update_var_handle_op_node(node));
     }
   }
-  return Status::OK();
+  return OkStatus();
 }
 
 }  // namespace
@@ -167,7 +164,7 @@ Status ConvertGraphDefToXla(GraphDef graph_def, const tf2xla::Config& config,
   TF_RETURN_IF_ERROR(InitGraph(graph_def, config, &graph));
   TF_RETURN_IF_ERROR(
       ConvertGraphToXla(std::move(graph), config, client, computation));
-  return Status::OK();
+  return OkStatus();
 }
 
 }  // namespace tensorflow

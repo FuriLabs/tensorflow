@@ -14,14 +14,14 @@ limitations under the License.
 ==============================================================================*/
 #include <cstdlib>
 #include <fstream>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/types/optional.h"
-#include "tensorflow/lite/c/common.h"
+#include "tensorflow/lite/core/c/common.h"
 #include "tensorflow/lite/tools/command_line_flags.h"
-#include "tensorflow/lite/tools/evaluation/evaluation_delegate_provider.h"
 #include "tensorflow/lite/tools/evaluation/proto/evaluation_config.pb.h"
 #include "tensorflow/lite/tools/evaluation/proto/evaluation_stages.pb.h"
 #include "tensorflow/lite/tools/evaluation/stages/object_detection_stage.h"
@@ -49,11 +49,14 @@ std::string GetNameFromPath(const std::string& str) {
 
 class CocoObjectDetection : public TaskExecutor {
  public:
-  CocoObjectDetection(int* argc, char* argv[]);
+  CocoObjectDetection() : debug_mode_(false), num_interpreter_threads_(1) {}
   ~CocoObjectDetection() override {}
 
+ protected:
+  std::vector<Flag> GetFlags() final;
+
   // If the run is successful, the latest metrics will be returned.
-  absl::optional<EvaluationStageMetrics> Run() final;
+  std::optional<EvaluationStageMetrics> RunImpl() final;
 
  private:
   void OutputResult(const EvaluationStageMetrics& latest_metrics) const;
@@ -65,11 +68,9 @@ class CocoObjectDetection : public TaskExecutor {
   bool debug_mode_;
   std::string delegate_;
   int num_interpreter_threads_;
-  DelegateProviders delegate_providers_;
 };
 
-CocoObjectDetection::CocoObjectDetection(int* argc, char* argv[])
-    : debug_mode_(false), num_interpreter_threads_(1) {
+std::vector<Flag> CocoObjectDetection::GetFlags() {
   std::vector<tflite::Flag> flag_list = {
       tflite::Flag::CreateFlag(kModelFileFlag, &model_file_path_,
                                "Path to test tflite model file."),
@@ -105,23 +106,21 @@ CocoObjectDetection::CocoObjectDetection(int* argc, char* argv[])
           "Delegate to use for inference, if available. "
           "Must be one of {'nnapi', 'gpu', 'xnnpack', 'hexagon'}"),
   };
-  tflite::Flags::Parse(argc, const_cast<const char**>(argv), flag_list);
-  DelegateProviders delegate_providers;
-  delegate_providers.InitFromCmdlineArgs(argc, const_cast<const char**>(argv));
+  return flag_list;
 }
 
-absl::optional<EvaluationStageMetrics> CocoObjectDetection::Run() {
+std::optional<EvaluationStageMetrics> CocoObjectDetection::RunImpl() {
   // Process images in filename-sorted order.
   std::vector<std::string> image_paths;
   if (GetSortedFileNames(StripTrailingSlashes(ground_truth_images_path_),
                          &image_paths) != kTfLiteOk) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   std::vector<std::string> model_labels;
   if (!ReadFileLines(model_output_labels_path_, &model_labels)) {
     TFLITE_LOG(ERROR) << "Could not read model output labels file";
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   EvaluationStageConfig eval_config;
@@ -142,7 +141,7 @@ absl::optional<EvaluationStageMetrics> CocoObjectDetection::Run() {
   ObjectDetectionStage eval(eval_config);
 
   eval.SetAllLabels(model_labels);
-  if (eval.Init(&delegate_providers_) != kTfLiteOk) return absl::nullopt;
+  if (eval.Init(&delegate_providers_) != kTfLiteOk) return std::nullopt;
 
   const int step = image_paths.size() / 100;
   for (int i = 0; i < image_paths.size(); ++i) {
@@ -152,7 +151,7 @@ absl::optional<EvaluationStageMetrics> CocoObjectDetection::Run() {
 
     const std::string image_name = GetNameFromPath(image_paths[i]);
     eval.SetInputs(image_paths[i], ground_truth_map[image_name]);
-    if (eval.Run() != kTfLiteOk) return absl::nullopt;
+    if (eval.Run() != kTfLiteOk) return std::nullopt;
 
     if (debug_mode_) {
       ObjectDetectionResult prediction = *eval.GetLatestPrediction();
@@ -188,7 +187,7 @@ absl::optional<EvaluationStageMetrics> CocoObjectDetection::Run() {
   }
 
   OutputResult(latest_metrics);
-  return absl::make_optional(latest_metrics);
+  return std::make_optional(latest_metrics);
 }
 
 void CocoObjectDetection::OutputResult(
@@ -224,8 +223,8 @@ void CocoObjectDetection::OutputResult(
                    << precision_metrics.overall_mean_average_precision();
 }
 
-std::unique_ptr<TaskExecutor> CreateTaskExecutor(int* argc, char* argv[]) {
-  return std::unique_ptr<TaskExecutor>(new CocoObjectDetection(argc, argv));
+std::unique_ptr<TaskExecutor> CreateTaskExecutor() {
+  return std::unique_ptr<TaskExecutor>(new CocoObjectDetection());
 }
 
 }  // namespace evaluation

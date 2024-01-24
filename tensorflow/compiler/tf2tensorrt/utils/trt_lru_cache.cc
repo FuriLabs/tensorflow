@@ -23,8 +23,7 @@ limitations under the License.
 #include "tensorflow/core/framework/tensor_shape.h"
 #include "tensorflow/core/platform/mutex.h"
 
-#if GOOGLE_CUDA
-#if GOOGLE_TENSORRT
+#if GOOGLE_CUDA && GOOGLE_TENSORRT
 #include "third_party/tensorrt/NvInfer.h"
 
 namespace tensorflow {
@@ -87,11 +86,11 @@ string TRTEngineCacheResource::DebugString() const {
   for (const auto& item : cache_) {
     mutex_lock lock(item.second->mu);
     oss << TensorShapeUtils::ShapeListString(item.first) << ": " << hex
-        << "ICudaEngine: " << item.second->cuda_engine.get() << ", "
+        << "ICudaEngine: " << item.second->GetCudaEngine() << ", "
         << "IExecutionContext: ";
-    for (auto& ctx : item.second->execution_context) {
-      oss << ctx.get() << ", ";
-    }
+    absl::c_for_each(
+        item.second->execution_contexts,
+        [&](const ExecutionContext& ctx) { oss << ctx.get() << ","; });
     oss << dec << endl;
   }
   return oss.str();
@@ -121,7 +120,7 @@ EngineContext* TRTEngineCacheResource::GetEngineContext(
 }
 
 EngineContext* TRTEngineCacheResource::GetEngineContext(const int profile_id) {
-  if (profile_id >= profiles_.GetNumProfiles()) {
+  if (profiles_.NeedProfiles() && profile_id >= profiles_.GetNumProfiles()) {
     LOG(ERROR) << "Out of range: profile_id " << profile_id
                << " is larger than number of profiles "
                << profiles_.GetNumProfiles();
@@ -141,5 +140,4 @@ EngineContext* TRTEngineCacheResource::GetEngineContext(const int profile_id) {
 }  // namespace tensorrt
 }  // namespace tensorflow
 
-#endif  // GOOGLE_TENSORRT
-#endif  // GOOGLE_CUDA
+#endif  // GOOGLE_CUDA && GOOGLE_TENSORRT

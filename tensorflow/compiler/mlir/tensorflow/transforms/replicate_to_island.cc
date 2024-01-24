@@ -17,10 +17,11 @@ limitations under the License.
 // `tf_device.replicate` island.
 
 #include <memory>
+#include <optional>
+#include <string>
 #include <utility>
 
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Sequence.h"
 #include "llvm/ADT/SmallVector.h"
@@ -28,7 +29,7 @@ limitations under the License.
 #include "llvm/Support/Casting.h"
 #include "mlir/IR/Attributes.h"  // from @llvm-project
 #include "mlir/IR/Block.h"  // from @llvm-project
-#include "mlir/IR/BlockAndValueMapping.h"  // from @llvm-project
+#include "mlir/IR/IRMapping.h"  // from @llvm-project
 #include "mlir/IR/Builders.h"  // from @llvm-project
 #include "mlir/IR/Diagnostics.h"  // from @llvm-project
 #include "mlir/IR/Dialect.h"  // from @llvm-project
@@ -38,99 +39,182 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_device.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_executor.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
-#include "tensorflow/core/platform/logging.h"
+#include "tensorflow/compiler/mlir/tensorflow/transforms/passes.h"
+#include "tensorflow/compiler/mlir/tensorflow/translate/split_into_island_per_op_pass.h"
+#include "tensorflow/compiler/mlir/tensorflow/utils/attribute_utils.h"
+#include "tensorflow/compiler/mlir/tensorflow/utils/device_util.h"
+#include "tensorflow/compiler/mlir/tensorflow/utils/tpu_rewrite_device_util.h"
 
 namespace mlir {
 namespace TFDevice {
 namespace {
 constexpr char kDeviceAttr[] = "device";
 constexpr char kReplicaIdAttr[] = "_xla_replica_id";
+constexpr char kDeviceOrdinalAttr[] = "device_ordinal";
+
+#define GEN_PASS_DEF_REPLICATETOISLANDPASS
+#include "tensorflow/compiler/mlir/tensorflow/transforms/tf_passes.h.inc"
 
 struct ReplicateToIslandPass
-    : public PassWrapper<ReplicateToIslandPass, FunctionPass> {
-  void runOnFunction() override;
+    : public impl::ReplicateToIslandPassBase<ReplicateToIslandPass> {
+  explicit ReplicateToIslandPass(bool legacy_graph_export) {
+    legacy_graph_export_ = legacy_graph_export;
+  }
+  void runOnOperation() override;
 };
 
 // Returns whether op requires `_xla_replica_id` attribute.
 bool RequiresReplicaIDAttribute(Operation* op) {
-  return llvm::isa<TF::EnqueueTPUEmbeddingSparseTensorBatchOp>(op) ||
-         llvm::isa<TF::EnqueueTPUEmbeddingRaggedTensorBatchOp>(op);
+  return llvm::isa<TF::EnqueueTPUEmbeddingSparseTensorBatchOp,
+                   TF::EnqueueTPUEmbeddingRaggedTensorBatchOp,
+                   TF::EnqueueTPUEmbeddingArbitraryTensorBatchOp>(op);
 }
 
-// Adds integer attribute that represents replica id for replicated ops that
-// require replica id attribute.
-void AddReplicaIdToOpsInReplicatedRegion(OpBuilder* builder, Region* region,
-                                         const int replica_id) {
-  region->walk([&](Operation* replicated_op) {
-    if (RequiresReplicaIDAttribute(replicated_op))
-      replicated_op->setAttr(kReplicaIdAttr,
-                             builder->getI32IntegerAttr(replica_id));
+// Returns the device ordinal (`device_ordinal`) for a replica (`replica_id`)
+// and logical core (`logical_core`).
+// `replica_id` is the index of the ancestor ReplicateOp in [0, num_replicas).
+// `logical_core` is the index of the TPU core in [0, num_cores_per_replica).
+// `device_ordinal` is the index of the TPU core relative to its host.
+LogicalResult GetDeviceOrdinal(const std::optional<DictionaryAttr>& devices,
+                               const unsigned replica_id,
+                               const uint64_t logical_core,
+                               int64_t& device_ordinal, Operation* op) {
+  if (!devices.has_value()) {
+    return op->emitOpError()
+           << "devices attribute is not present in 'tf.device.replicate' op";
+  }
+  auto logical_core_name =
+      tensorflow::GetDeviceAliasForLogicalCore(logical_core);
+  auto tpu_replica = devices.value().get(logical_core_name);
+  if (!tpu_replica) {
+    return op->emitOpError()
+           << "requires device ordinal from device " << logical_core_name
+           << " to be present in 'tf.device.replicate' op";
+  }
+  llvm::StringRef tpu_device =
+      tpu_replica.cast<ArrayAttr>()[replica_id].cast<StringAttr>().getValue();
+  return tensorflow::GetDeviceOrdinalFromDeviceString(op->getLoc(), tpu_device,
+                                                      &device_ordinal);
+}
+
+// Updates replica variant ops in a region based on replica `replica_id`.
+// TODO(b/157624749): Replace this with better abstraction to differentiate ops
+// for different replicas. Some ops, such as XlaHostCompute op or TPU Embedding
+// ops, require replica id to be added as an op attribute to be used during
+// execution. Handle such ops separately and add an integer attribute that
+// represents replica id.
+LogicalResult UpdateRegionReplicateVariantOps(
+    OpBuilder& builder, Location loc, Region& region, int replica_id,
+    const std::optional<DictionaryAttr>& devices) {
+  auto result = region.walk([&](Operation* op) -> WalkResult {
+    if (RequiresReplicaIDAttribute(op)) {
+      op->setAttr(kReplicaIdAttr, builder.getI64IntegerAttr(replica_id));
+      return WalkResult::advance();
+    }
+
+    if (auto placeholder = dyn_cast<TF::_TPUDeviceOrdinalPlaceholderOp>(op)) {
+      int64_t device_ordinal;
+      if (failed(GetDeviceOrdinal(devices, replica_id,
+                                  placeholder.getLogicalCore(), device_ordinal,
+                                  op)))
+        return failure();
+
+      OpBuilder builder(op);
+      auto const_op = builder.create<TF::ConstOp>(
+          op->getLoc(), DenseIntElementsAttr::get(
+                            RankedTensorType::get({}, builder.getI64Type()),
+                            {device_ordinal}));
+      op->replaceAllUsesWith(const_op);
+      op->erase();
+      return WalkResult::advance();
+    }
+
+    if (!devices.has_value()) return WalkResult::advance();
+
+    // Map aliased devices to explicit devices based on replica.
+    if (auto launch = dyn_cast<tf_device::LaunchOp>(op))
+      if (auto device_by_replica = devices.value().get(launch.getDevice()))
+        launch->setAttr(
+            kDeviceAttr,
+            device_by_replica.cast<ArrayAttr>()[replica_id].cast<StringAttr>());
+
+    return WalkResult::advance();
   });
+
+  return failure(result.wasInterrupted());
 }
 
 // Creates islands per replica from `tf_device.replicate` region. If for a
 // `tf_device.launch` op the device is an aliased device of the
 // `tf_device.replicate`, the device will be remapped to an explicit device
 // for the associated replica island.
-llvm::SmallVector<tf_executor::IslandOp, 8> ExpandReplicateIntoReplicas(
-    const Dialect* tf_dialect, OpBuilder* builder,
+LogicalResult ExpandReplicateIntoReplicas(
+    const Dialect* tf_dialect, OpBuilder& builder,
     tf_executor::IslandOp island_op, tf_device::ReplicateOp replicate_op,
-    int num_replicas) {
-  auto devices = replicate_op.devices();
-  const bool has_devices = devices.hasValue();
-  llvm::SmallVector<tf_executor::IslandOp, 8> replicas;
+    int num_replicas, llvm::SmallVectorImpl<tf_executor::IslandOp>& replicas,
+    bool legacy_graph_export, int replica_group_idx) {
   replicas.reserve(num_replicas);
+  auto devices = replicate_op.getDevices();
 
   // Collect result types and operands.
   Operation& terminator = replicate_op.GetBody().back();
   llvm::SmallVector<Type, 8> output_types(terminator.getOperandTypes());
   auto control_type = tf_executor::ControlType::get(island_op.getContext());
-  llvm::SmallVector<Value, 8> replica_inputs(island_op.controlInputs());
+  llvm::SmallVector<Value, 8> replica_inputs(island_op.getControlInputs());
 
   // Replace replicate terminator with YieldOp.
-  builder->setInsertionPoint(&terminator);
-  builder->create<tf_executor::YieldOp>(terminator.getLoc(),
-                                        terminator.getOperands());
+  builder.setInsertionPoint(&terminator);
+  builder.create<tf_executor::YieldOp>(terminator.getLoc(),
+                                       terminator.getOperands());
   terminator.erase();
 
-  builder->setInsertionPoint(island_op);
-  BlockAndValueMapping mapping;
+  builder.setInsertionPoint(island_op);
+  IRMapping mapping;
   for (int i : llvm::seq<int>(0, num_replicas)) {
     // Create new island for replica.
-    auto replica = builder->create<tf_executor::IslandOp>(
+    auto replica = builder.create<tf_executor::IslandOp>(
         island_op.getLoc(), output_types, control_type, replica_inputs);
 
     // Map block arg to replica arg.
     mapping.clear();
     for (auto& block_arg : replicate_op.GetBody().getArguments())
-      mapping.map(block_arg, replicate_op.getOperand(
-                                 block_arg.getArgNumber() * num_replicas + i));
+      mapping.map(block_arg,
+                  replicate_op.GetReplicaOperandForBlockArgument(block_arg, i));
 
     // Copy over replicate region into replica island.
-    replicate_op.body().cloneInto(&replica.body(), mapping);
+    replicate_op.getBody().cloneInto(&replica.getBody(), mapping);
 
-    // TODO(b/157624749): Replace this with better abstraction to
-    // differentiate ops for different replicas.
-    // Some ops, such as XlaHostCompute op or TPU Embedding ops, require
-    // replica id to be added as an op attribute to be used during
-    // execution. Handle such ops separately and add an integer attribute
-    // that represents replica id.
-    AddReplicaIdToOpsInReplicatedRegion(builder, &replica.body(), i);
+    if (failed(UpdateRegionReplicateVariantOps(builder, replicate_op.getLoc(),
+                                               replica.getBody(),
+                                               /*replica_id=*/i, devices)))
+      return failure();
 
-    // Map aliased devices to explicit devices based on replica.
-    if (has_devices) {
-      replica.walk([&](tf_device::LaunchOp launch) {
-        if (auto device_by_replica = devices.getValue().get(launch.device()))
-          launch.setAttr(
-              kDeviceAttr,
-              device_by_replica.cast<ArrayAttr>()[i].cast<StringAttr>());
-      });
+    // In new graph export pipeline, we will update control dependencies in the
+    // end of the pipeline. Mostly, it will rely on side effect analysis by
+    // considering accessing resource only. However, for branches under parallel
+    // group, there should not be any control deps between them even side effect
+    // analysis indicate some control deps. Therefore, we will mark parallel
+    // group and branch information here so that `UpdateControlDependenciesPass`
+    // can fetch the related information later.
+    if (!legacy_graph_export) {
+      std::string group_annotation = absl::StrCat(
+          "r", std::to_string(replica_group_idx), ":", std::to_string(i));
+      if (auto parallel_group_attr = replicate_op->getAttrOfType<StringAttr>(
+              TF::kParallelExecAnnotation)) {
+        // Extend the existing attribute so that nested parallel execution
+        // structure is supported.
+        group_annotation = absl::StrCat(parallel_group_attr.getValue().str(),
+                                        ",", group_annotation);
+      }
+      for (auto& op : replica.GetBody()) {
+        op.setAttr(TF::kParallelExecAnnotation,
+                   builder.getStringAttr(group_annotation));
+      }
     }
-
     replicas.push_back(replica);
   }
 
-  return replicas;
+  return success();
 }
 
 // Creates islands per replica from `tf_device.replicate` region and remap
@@ -146,11 +230,11 @@ llvm::SmallVector<tf_executor::IslandOp, 8> ExpandReplicateIntoReplicas(
 //              {n = 2 : i32,
 //               devices = {DEVICE_ALIAS_0 = ["/DEVICE:0", "/DEVICE:1"],
 //                          DEVICE_ALIAS_1 = ["/DEVICE:2", "/DEVICE:3"]}} {
-//     %a = "tf_device.launch"() ( {
+//     %a = "tf_device.launch"() ({
 //       %2 = "tf.opA"(%ri) : (tensor<i1>) -> tensor<i1>
 //       tf_device.return %2 : tensor<i1>
 //     }) {device = "DEVICE_ALIAS_0"} : () -> tensor<i1>
-//     %b = "tf_device.launch"() ( {
+//     %b = "tf_device.launch"() ({
 //       %3 = "tf.opB"(%a) : (tensor<i1>) -> tensor<i1>
 //       tf_device.return %3 : tensor<i1>
 //     }) {device = "DEVICE_ALIAS_1"} : () -> tensor<i1>
@@ -162,102 +246,153 @@ llvm::SmallVector<tf_executor::IslandOp, 8> ExpandReplicateIntoReplicas(
 // gets lowered to:
 //
 // %0:3 = tf_executor.island(%control) {
-//   %a0 = "tf_device.launch"() ( {
+//   %a0 = "tf_device.launch"() ({
 //     %1 = "tf.opA"(%arg0) : (tensor<i1>) -> tensor<i1>
 //     tf_device.return %1 : tensor<i1>
 //   }) {device = "/DEVICE:0"} : () -> tensor<i1>
-//   %b0 = "tf_device.launch"() ( {
+//   %b0 = "tf_device.launch"() ({
 //     %2 = "tf.opB"(%a0) : (tensor<i1>) -> tensor<i1>
 //     tf_device.return %2 : tensor<i1>
 //   }) {device = "/DEVICE:2"} : () -> tensor<i1>
 //   tf_executor.yield %a0, %b0 : tensor<i1>, tensor<i1>
 // }
 // %3:3 = tf_executor.island(%control) {
-//   %a1 = "tf_device.launch"() ( {
+//   %a1 = "tf_device.launch"() ({
 //     %4 = "tf.opA"(%arg1) : (tensor<i1>) -> tensor<i1>
 //     tf_device.return %4 : tensor<i1>
 //   }) {device = "/DEVICE:1"} : () -> tensor<i1>
-//   %b1 = "tf_device.launch"() ( {
+//   %b1 = "tf_device.launch"() ({
 //     %5 = "tf.opB"(%a1) : (tensor<i1>) -> tensor<i1>
 //     tf_device.return %5 : tensor<i1>
 //   }) {device = "/DEVICE:3"} : () -> tensor<i1>
 //   tf_executor.yield %a1, %b1 : tensor<i1>, tensor<i1>
 // }
-void CreateIslandsFromReplicate(const Dialect* tf_dialect,
-                                tf_executor::IslandOp island_op,
-                                tf_device::ReplicateOp replicate_op) {
+LogicalResult CreateIslandsFromReplicate(const Dialect* tf_dialect,
+                                         tf_executor::GraphOp graph_op,
+                                         tf_executor::IslandOp island_op,
+                                         tf_device::ReplicateOp replicate_op,
+                                         bool legacy_graph_export,
+                                         int replica_group_idx) {
   OpBuilder builder(island_op);
-  const int num_replicas = replicate_op.n().getLimitedValue();
+  const int num_replicas = replicate_op.getN();
 
   // Create islands per replica.
-  llvm::SmallVector<tf_executor::IslandOp, 8> replicas =
-      ExpandReplicateIntoReplicas(tf_dialect, &builder, island_op, replicate_op,
-                                  num_replicas);
+  llvm::SmallVector<tf_executor::IslandOp, 8> replicas;
+  if (failed(ExpandReplicateIntoReplicas(
+          tf_dialect, builder, island_op, replicate_op, num_replicas, replicas,
+          legacy_graph_export, replica_group_idx)))
+    return failure();
 
   // Collect all replica results.
   llvm::SmallVector<Value, 8> replicas_outputs(replicate_op.getNumResults(),
                                                nullptr);
   for (auto replica_and_idx : llvm::enumerate(replicas))
     for (auto replica_result_and_idx :
-         llvm::enumerate(replica_and_idx.value().outputs()))
+         llvm::enumerate(replica_and_idx.value().getOutputs()))
       replicas_outputs[num_replicas * replica_result_and_idx.index() +
                        replica_and_idx.index()] =
           replica_result_and_idx.value();
 
   // Remap replicate results to per replica result.
-  for (auto result : llvm::zip(island_op.outputs(), replicas_outputs))
+  for (auto result : llvm::zip(island_op.getOutputs(), replicas_outputs))
     std::get<0>(result).replaceAllUsesWith(std::get<1>(result));
 
   // Add sink island to pin all replicas as a control dependency if there is a
   // control dependency leading from the replicate originally.
-  if (!island_op.control().use_empty()) {
+  if (!island_op.getControl().use_empty()) {
     llvm::SmallVector<Value, 8> island_operands;
-    for (auto& replica : replicas) island_operands.push_back(replica.control());
+    for (auto& replica : replicas)
+      island_operands.push_back(replica.getControl());
 
     builder.setInsertionPoint(island_op);
     auto island_sink = builder.create<tf_executor::IslandOp>(
         island_op.getLoc(), llvm::ArrayRef<Type>{},
         tf_executor::ControlType::get(island_op.getContext()), island_operands);
-    island_sink.body().push_back(new Block);
+    island_sink.getBody().push_back(new Block);
     builder.setInsertionPointToEnd(&island_sink.GetBody());
     builder.create<tf_executor::YieldOp>(island_op.getLoc(),
                                          llvm::ArrayRef<Value>{});
-    island_op.control().replaceAllUsesWith(island_sink.control());
+    island_op.getControl().replaceAllUsesWith(island_sink.getControl());
+  }
+
+  if (legacy_graph_export) {
+    // Replicas with no uses should be pinned to a graph fetch so they still
+    // execute.
+    llvm::SmallVector<Value, 8> unused_replica_controls;
+    for (auto& replica : replicas)
+      if (replica.use_empty())
+        unused_replica_controls.push_back(replica.getControl());
+
+    if (!unused_replica_controls.empty()) {
+      tf_executor::FetchOp fetch = graph_op.GetFetch();
+      auto fetches = llvm::to_vector<8>(fetch.getOperands());
+      fetches.append(unused_replica_controls.begin(),
+                     unused_replica_controls.end());
+      builder.setInsertionPoint(fetch);
+      builder.create<tf_executor::FetchOp>(fetch.getLoc(), fetches);
+      fetch.erase();
+    }
+  } else {
+    // Now, finally, we need to maintain the invariant expected to be maintained
+    // throughout the graph export pipeline that all islands always perfectly
+    // wrap a single op. So we'll split all replica islands.
+    auto control_type = tf_executor::ControlType::get(island_op.getContext());
+    for (auto& replica : replicas) {
+      if (replica.GetBody().getOperations().size() > 1) {
+        mlir::TF::SplitIsland(replica, control_type);
+      }
+    }
   }
 
   island_op.erase();
+  return success();
 }
 
-// Finds islands with a single `tf_device.replicate` and create individual
-// islands per replica of the replicate.
-void LowerSingleIslandReplicateToIslands(const Dialect* tf_dialect,
-                                         tf_executor::IslandOp island_op) {
-  if (!island_op.WrapsSingleOp()) return;
-
-  if (auto replicate_op =
-          llvm::dyn_cast<tf_device::ReplicateOp>(&island_op.GetBody().front()))
-    CreateIslandsFromReplicate(tf_dialect, island_op, replicate_op);
-}
-
-void ReplicateToIslandPass::runOnFunction() {
-  const Dialect* tf_dialect = getContext().getRegisteredDialect("tf");
+void ReplicateToIslandPass::runOnOperation() {
+  const Dialect* tf_dialect = getContext().getLoadedDialect("tf");
   if (!tf_dialect) {
-    signalPassFailure();
-    getFunction().emitError() << "'tf' dialect is not registered";
+    getOperation().emitError() << "'tf' dialect is not registered";
+    return signalPassFailure();
   }
 
-  getFunction().walk([&](tf_executor::IslandOp island_op) {
-    LowerSingleIslandReplicateToIslands(tf_dialect, island_op);
+  // Find islands with a single `tf_device.replicate` and create individual
+  // islands per replica of the replicate.
+  llvm::SmallVector<tf_executor::IslandOp, 4> replicate_op_islands;
+  getOperation().walk([&](tf_executor::GraphOp graph_op) {
+    for (auto island_op : graph_op.getOps<tf_executor::IslandOp>()) {
+      if (!island_op.WrapsSingleOp()) continue;
+
+      if (isa<tf_device::ReplicateOp>(&island_op.GetBody().front()))
+        replicate_op_islands.push_back(island_op);
+    }
   });
+
+  // This number is unique within each function which is sufficient for
+  // `UpdateControlDependenciesPass` which consumes the related attributes.
+  // However, this assumes that we don't inline functions between this pass
+  // and `UpdateControlDependenciesPass`.
+  // If we need globally unique replica group IDs in the future,
+  // we can either make this pass a module pass (using a global counter)
+  // or use an atomic counter.
+  int replica_group_idx = 0;
+  for (tf_executor::IslandOp island_op : replicate_op_islands) {
+    auto graph_op = island_op->getParentOfType<tf_executor::GraphOp>();
+    auto replicate_op =
+        cast<tf_device::ReplicateOp>(island_op.GetBody().front());
+    if (failed(CreateIslandsFromReplicate(tf_dialect, graph_op, island_op,
+                                          replicate_op, legacy_graph_export_,
+                                          replica_group_idx))) {
+      return signalPassFailure();
+    }
+    replica_group_idx++;
+  }
 }
 }  // anonymous namespace
 
-std::unique_ptr<OperationPass<FuncOp>> CreateReplicateToIslandPass() {
-  return std::make_unique<ReplicateToIslandPass>();
+std::unique_ptr<OperationPass<func::FuncOp>> CreateReplicateToIslandPass(
+    bool legacy_graph_export) {
+  return std::make_unique<ReplicateToIslandPass>(legacy_graph_export);
 }
-
-static PassRegistration<ReplicateToIslandPass> pass(
-    "tf-replicate-to-island", "Lowers device replicate to executor islands");
 
 }  // namespace TFDevice
 }  // namespace mlir

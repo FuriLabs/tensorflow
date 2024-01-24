@@ -18,6 +18,9 @@ limitations under the License.
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/framework/tensor_testutil.h"
 #include "tensorflow/core/framework/types.h"
+#include "tensorflow/core/framework/variant.h"
+#include "tensorflow/core/framework/variant_encode_decode.h"
+#include "tensorflow/core/framework/variant_tensor_data.h"
 #include "tensorflow/core/kernels/ops_testutil.h"
 #include "tensorflow/core/kernels/ops_util.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
@@ -55,7 +58,7 @@ TEST_F(AsStringGraphTest, Int8) {
 TEST_F(AsStringGraphTest, Int64) {
   TF_ASSERT_OK(Init(DT_INT64));
 
-  AddInputFromArray<int64>(TensorShape({3}), {-42, 0, 42});
+  AddInputFromArray<int64_t>(TensorShape({3}), {-42, 0, 42});
   TF_ASSERT_OK(RunOpKernel());
   Tensor expected(allocator(), DT_STRING, TensorShape({3}));
   test::FillValues<tstring>(&expected, {"-42", "0", "42"});
@@ -148,21 +151,31 @@ TEST_F(AsStringGraphTest, Bool) {
   test::ExpectTensorEqual<tstring>(expected, *GetOutput(0));
 }
 
-TEST_F(AsStringGraphTest, String) {
-  Status s = Init(DT_STRING);
-  ASSERT_EQ(error::INVALID_ARGUMENT, s.code());
-  ASSERT_TRUE(absl::StrContains(
-      s.error_message(),
-      "Value for attr 'T' of string is not in the list of allowed values"));
+TEST_F(AsStringGraphTest, Variant) {
+  TF_ASSERT_OK(Init(DT_VARIANT));
+
+  AddInput(DT_VARIANT, TensorShape({4}));
+  auto inputs = mutable_input(0)->flat<Variant>();
+  inputs(0) = 2;
+  inputs(1) = 3;
+  inputs(2) = true;
+  inputs(3) = Tensor("hi");
+  TF_ASSERT_OK(RunOpKernel());
+  Tensor expected(allocator(), DT_STRING, TensorShape({4}));
+  test::FillValues<tstring>(
+      &expected, {"Variant<type: int value: 2>", "Variant<type: int value: 3>",
+                  "Variant<type: bool value: 1>",
+                  ("Variant<type: tensorflow::Tensor value: Tensor<type: string"
+                   " shape: [] values: hi>>")});
+  test::ExpectTensorEqual<tstring>(expected, *GetOutput(0));
 }
 
 TEST_F(AsStringGraphTest, OnlyOneOfScientificAndShortest) {
   Status s = Init(DT_FLOAT, /*fill=*/"", /*width=*/-1, /*precision=*/-1,
                   /*scientific=*/true, /*shortest=*/true);
   ASSERT_EQ(error::INVALID_ARGUMENT, s.code());
-  ASSERT_TRUE(
-      absl::StrContains(s.error_message(),
-                        "Cannot select both scientific and shortest notation"));
+  ASSERT_TRUE(absl::StrContains(
+      s.message(), "Cannot select both scientific and shortest notation"));
 }
 
 TEST_F(AsStringGraphTest, NoShortestForNonFloat) {
@@ -170,7 +183,7 @@ TEST_F(AsStringGraphTest, NoShortestForNonFloat) {
                   /*scientific=*/false, /*shortest=*/true);
   ASSERT_EQ(error::INVALID_ARGUMENT, s.code());
   ASSERT_TRUE(absl::StrContains(
-      s.error_message(),
+      s.message(),
       "scientific and shortest format not supported for datatype"));
 }
 
@@ -179,28 +192,28 @@ TEST_F(AsStringGraphTest, NoScientificForNonFloat) {
                   /*scientific=*/true);
   ASSERT_EQ(error::INVALID_ARGUMENT, s.code());
   ASSERT_TRUE(absl::StrContains(
-      s.error_message(),
+      s.message(),
       "scientific and shortest format not supported for datatype"));
 }
 
 TEST_F(AsStringGraphTest, NoPrecisionForNonFloat) {
   Status s = Init(DT_INT32, /*fill=*/"", /*width=*/-1, /*precision=*/5);
   ASSERT_EQ(error::INVALID_ARGUMENT, s.code());
-  ASSERT_TRUE(absl::StrContains(s.error_message(),
-                                "precision not supported for datatype"));
+  ASSERT_TRUE(
+      absl::StrContains(s.message(), "precision not supported for datatype"));
 }
 
 TEST_F(AsStringGraphTest, LongFill) {
   Status s = Init(DT_INT32, /*fill=*/"asdf");
   ASSERT_EQ(error::INVALID_ARGUMENT, s.code());
-  ASSERT_TRUE(absl::StrContains(s.error_message(),
+  ASSERT_TRUE(absl::StrContains(s.message(),
                                 "Fill string must be one or fewer characters"));
 }
 
 TEST_F(AsStringGraphTest, FillWithZero) {
   TF_ASSERT_OK(Init(DT_INT64, /*fill=*/"0", /*width=*/4));
 
-  AddInputFromArray<int64>(TensorShape({3}), {-42, 0, 42});
+  AddInputFromArray<int64_t>(TensorShape({3}), {-42, 0, 42});
   TF_ASSERT_OK(RunOpKernel());
   Tensor expected(allocator(), DT_STRING, TensorShape({3}));
   test::FillValues<tstring>(&expected, {"-042", "0000", "0042"});
@@ -210,7 +223,7 @@ TEST_F(AsStringGraphTest, FillWithZero) {
 TEST_F(AsStringGraphTest, FillWithSpace) {
   TF_ASSERT_OK(Init(DT_INT64, /*fill=*/" ", /*width=*/4));
 
-  AddInputFromArray<int64>(TensorShape({3}), {-42, 0, 42});
+  AddInputFromArray<int64_t>(TensorShape({3}), {-42, 0, 42});
   TF_ASSERT_OK(RunOpKernel());
   Tensor expected(allocator(), DT_STRING, TensorShape({3}));
   test::FillValues<tstring>(&expected, {" -42", "   0", "  42"});
@@ -220,7 +233,7 @@ TEST_F(AsStringGraphTest, FillWithSpace) {
 TEST_F(AsStringGraphTest, FillWithChar1) {
   TF_ASSERT_OK(Init(DT_INT64, /*fill=*/"-", /*width=*/4));
 
-  AddInputFromArray<int64>(TensorShape({3}), {-42, 0, 42});
+  AddInputFromArray<int64_t>(TensorShape({3}), {-42, 0, 42});
   TF_ASSERT_OK(RunOpKernel());
   Tensor expected(allocator(), DT_STRING, TensorShape({3}));
   test::FillValues<tstring>(&expected, {"-42 ", "0   ", "42  "});
@@ -230,15 +243,13 @@ TEST_F(AsStringGraphTest, FillWithChar1) {
 TEST_F(AsStringGraphTest, FillWithChar3) {
   Status s = Init(DT_INT32, /*fill=*/"s");
   ASSERT_EQ(error::INVALID_ARGUMENT, s.code());
-  ASSERT_TRUE(
-      absl::StrContains(s.error_message(), "Fill argument not supported"));
+  ASSERT_TRUE(absl::StrContains(s.message(), "Fill argument not supported"));
 }
 
 TEST_F(AsStringGraphTest, FillWithChar4) {
   Status s = Init(DT_INT32, /*fill=*/"n");
   ASSERT_EQ(error::INVALID_ARGUMENT, s.code());
-  ASSERT_TRUE(
-      absl::StrContains(s.error_message(), "Fill argument not supported"));
+  ASSERT_TRUE(absl::StrContains(s.message(), "Fill argument not supported"));
 }
 
 }  // end namespace

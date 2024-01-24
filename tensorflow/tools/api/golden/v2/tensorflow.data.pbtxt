@@ -1,6 +1,10 @@
 path: "tensorflow.data"
 tf_module {
   member {
+    name: "AUTOTUNE"
+    mtype: "<type \'int\'>"
+  }
+  member {
     name: "Dataset"
     mtype: "<type \'type\'>"
   }
@@ -25,6 +29,10 @@ tf_module {
     mtype: "<type \'type\'>"
   }
   member {
+    name: "NumpyIterator"
+    mtype: "<type \'type\'>"
+  }
+  member {
     name: "Options"
     mtype: "<type \'type\'>"
   }
@@ -34,6 +42,10 @@ tf_module {
   }
   member {
     name: "TextLineDataset"
+    mtype: "<type \'type\'>"
+  }
+  member {
+    name: "ThreadingOptions"
     mtype: "<type \'type\'>"
   }
   member {

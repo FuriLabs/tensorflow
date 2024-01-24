@@ -14,7 +14,14 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/core/tpu/kernels/tpu_util.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "absl/strings/str_format.h"
 #include "absl/strings/str_split.h"
+#include "xla/stream_executor/tpu/tpu_api.h"
 #include "tensorflow/core/platform/random.h"
 
 namespace tensorflow {
@@ -65,10 +72,10 @@ Status ShapeTensorToTensorShape(const Tensor& tensor, TensorShape* shape) {
       !TensorShapeUtils::IsVector(tensor.shape())) {
     return errors::InvalidArgument("Shape tensor must be an int64 vector.");
   }
-  const int64 rank = tensor.NumElements();
-  auto tensor_dims = tensor.flat<int64>();
-  std::vector<int64> dims(rank);
-  for (int64 i = 0; i < rank; ++i) {
+  const int64_t rank = tensor.NumElements();
+  auto tensor_dims = tensor.flat<int64_t>();
+  std::vector<int64_t> dims(rank);
+  for (int64_t i = 0; i < rank; ++i) {
     dims[i] = tensor_dims(i);
   }
   return TensorShapeUtils::MakeShape(dims, shape);
@@ -81,7 +88,7 @@ Status DynamicShapesToTensorShapes(const OpInputList& dynamic_shapes,
     TF_RETURN_IF_ERROR(
         ShapeTensorToTensorShape(dynamic_shapes[i], &(*shapes)[i]));
   }
-  return Status::OK();
+  return OkStatus();
 }
 
 Status DynamicShapesToTensorShapes(const InputList& dynamic_shapes,
@@ -93,8 +100,16 @@ Status DynamicShapesToTensorShapes(const InputList& dynamic_shapes,
         ShapeTensorToTensorShape(dynamic_shape.tensor(), &(*shapes)[i]));
     ++i;
   }
-  return Status::OK();
+  return OkStatus();
 }
 
+xla::StatusOr<std::unique_ptr<::grpc::ServerBuilder>> CreateServerBuilder(
+    int serving_port) {
+  auto server_builder = std::make_unique<::grpc::ServerBuilder>();
+  server_builder->AddListeningPort(
+      absl::StrFormat("[::]:%d", serving_port),
+      ::grpc::InsecureServerCredentials());  // NOLINT
+  return std::move(server_builder);
+}
 }  // namespace tpu
 }  // namespace tensorflow

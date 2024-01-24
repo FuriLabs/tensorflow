@@ -16,10 +16,12 @@ limitations under the License.
 #ifndef TENSORFLOW_CORE_DISTRIBUTED_RUNTIME_EAGER_DESTROY_TENSOR_HANDLE_NODE_H_
 #define TENSORFLOW_CORE_DISTRIBUTED_RUNTIME_EAGER_DESTROY_TENSOR_HANDLE_NODE_H_
 
-#include "tensorflow/core/common_runtime/eager/context.h"
+#include <memory>
+#include <utility>
+
+#include "absl/status/status.h"
 #include "tensorflow/core/common_runtime/eager/eager_executor.h"
 #include "tensorflow/core/distributed_runtime/eager/eager_client.h"
-#include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/protobuf/eager_service.pb.h"
 
 namespace tensorflow {
@@ -47,19 +49,19 @@ class DestroyTensorHandleNode : public tensorflow::AsyncEagerNode {
     // well. We don't want this request poison following requests since it is
     // safe to ignore a failing destroy tensor handle request.
     eager_client_->EnqueueAsync(
-        request_.get(), response,
+        /*call_opts=*/nullptr, request_.get(), response,
         [response, ready, done](const tensorflow::Status& s) {
           // Omit the warning if:
           // 1. The remote tensor isn't ready.
           // 2. Lost connection to remote worker. In this case client will
           //    crash. We don't want to spam user with redundant warning logs.
-          if (!s.ok() && ready && s.code() != errors::Code::UNAVAILABLE) {
+          if (!s.ok() && ready && !absl::IsUnavailable(s)) {
             LOG_EVERY_N_SEC(WARNING, 60)
                 << "Ignoring an error encountered when deleting "
                    "remote tensors handles: "
                 << s.ToString();
           }
-          done(Status::OK());
+          done(OkStatus());
           delete response;
         });
   }

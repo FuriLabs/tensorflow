@@ -13,6 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <algorithm>
+
 #include "tensorflow/core/framework/common_shape_fns.h"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/shape_inference.h"
@@ -56,7 +58,7 @@ Status SetOutputToSizedImage(InferenceContext* c, DimensionHandle batch_dim,
     width = c->MakeDim(vec(1));
   }
   c->set_output(0, c->MakeShape({batch_dim, height, width, channel_dim}));
-  return Status::OK();
+  return OkStatus();
 }
 
 Status ResizeShapeFn(InferenceContext* c) {
@@ -70,7 +72,7 @@ Status DecodeImageShapeFn(InferenceContext* c) {
   ShapeHandle unused;
   TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 0, &unused));
   DimensionHandle channels_dim;
-  int32 channels;
+  int32_t channels;
   TF_RETURN_IF_ERROR(c->GetAttr("channels", &channels));
   if (channels == 0) {
     channels_dim = c->UnknownDim();
@@ -84,14 +86,58 @@ Status DecodeImageShapeFn(InferenceContext* c) {
 
   c->set_output(0, c->MakeShape({InferenceContext::kUnknownDim,
                                  InferenceContext::kUnknownDim, channels_dim}));
-  return Status::OK();
+  return OkStatus();
+}
+
+Status DecodeImageV2ShapeFn(InferenceContext* c) {
+  ShapeHandle unused;
+  int32_t channels;
+  bool expand_animations;
+  DimensionHandle channels_dim;
+
+  TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 0, &unused));
+  TF_RETURN_IF_ERROR(c->GetAttr("channels", &channels));
+  TF_RETURN_IF_ERROR(c->GetAttr("expand_animations", &expand_animations));
+
+  if (channels == 0) {
+    channels_dim = c->UnknownDim();
+  } else {
+    if (channels < 0) {
+      return errors::InvalidArgument("channels must be non-negative, got ",
+                                     channels);
+    }
+    channels_dim = c->MakeDim(channels);
+  }
+
+  // `expand_animations` set to true will return 4-D shapes for GIF. 3-D shapes
+  // will be returned for jpg, png, and bmp. `expand_animations` set to false
+  // will always return 3-D shapes for all (jpg, png, bmp, gif).
+  if (expand_animations) {
+    c->set_output(0, c->UnknownShape());
+    return OkStatus();
+  } else {
+    c->set_output(0,
+                  c->MakeShape({InferenceContext::kUnknownDim,
+                                InferenceContext::kUnknownDim, channels_dim}));
+    return OkStatus();
+  }
 }
 
 Status EncodeImageShapeFn(InferenceContext* c) {
   ShapeHandle unused;
   TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 3, &unused));
   c->set_output(0, c->Scalar());
-  return Status::OK();
+  return OkStatus();
+}
+
+// Allow encoding batches of images.
+Status BatchedEncodeImageShapeFn(InferenceContext* c) {
+  ShapeHandle input;
+  TF_RETURN_IF_ERROR(c->WithRankAtLeast(c->input(0), 3, &input));
+  ShapeHandle s;
+  TF_RETURN_IF_ERROR(c->Subshape(input, 0, -3, &s));
+  c->set_output(0, s);
+  return OkStatus();
 }
 
 Status ColorspaceShapeFn(InferenceContext* c) {
@@ -105,7 +151,7 @@ Status ColorspaceShapeFn(InferenceContext* c) {
   TF_RETURN_IF_ERROR(c->ReplaceDim(input, -1, last_dim, &out));
   c->set_output(0, out);
 
-  return Status::OK();
+  return OkStatus();
 }
 
 Status NMSShapeFn(InferenceContext* c) {
@@ -128,7 +174,7 @@ Status NMSShapeFn(InferenceContext* c) {
   TF_RETURN_IF_ERROR(c->WithValue(c->Dim(boxes, 1), 4, &unused));
 
   c->set_output(0, c->Vector(c->UnknownDim()));
-  return Status::OK();
+  return OkStatus();
 }
 
 Status SoftNMSShapeFn(InferenceContext* c) {
@@ -154,7 +200,7 @@ Status SoftNMSShapeFn(InferenceContext* c) {
 
   c->set_output(0, c->Vector(c->UnknownDim()));
   c->set_output(1, c->Vector(c->UnknownDim()));
-  return Status::OK();
+  return OkStatus();
 }
 
 Status CombinedNMSShapeFn(InferenceContext* c) {
@@ -200,7 +246,7 @@ Status CombinedNMSShapeFn(InferenceContext* c) {
   DimensionHandle size_per_class;
   TF_RETURN_IF_ERROR(c->MakeDimForScalarInput(2, &size_per_class));
 
-  int64 output_size;
+  int64_t output_size = -1;
   bool pad_per_class;
   TF_RETURN_IF_ERROR(c->GetAttr("pad_per_class", &pad_per_class));
   if (!pad_per_class) {
@@ -211,14 +257,17 @@ Status CombinedNMSShapeFn(InferenceContext* c) {
           "max_output_size_per_class must be > 0 "
           "if pad_per_class is set to true ");
     }
-    output_size = std::min(c->Value(output_dim),
-                           c->Value(size_per_class) * c->Value(class_dim));
+    if (c->ValueKnown(size_per_class) && c->ValueKnown(class_dim)) {
+      output_size = std::min(
+          static_cast<int64_t>(c->Value(output_dim)),
+          static_cast<int64_t>(c->Value(size_per_class)) * c->Value(class_dim));
+    }
   }
   c->set_output(0, c->MakeShape({batch_dim, output_size, 4}));
   c->set_output(1, c->MakeShape({batch_dim, output_size}));
   c->set_output(2, c->MakeShape({batch_dim, output_size}));
   c->set_output(3, c->Vector(batch_dim));
-  return Status::OK();
+  return OkStatus();
 }
 
 }  // namespace
@@ -256,7 +305,7 @@ REGISTER_OP("ResizeBicubicGrad")
     .Attr("half_pixel_centers: bool = false")
     .SetShapeFn([](InferenceContext* c) {
       c->set_output(0, c->input(1));
-      return Status::OK();
+      return OkStatus();
     });
 
 // --------------------------------------------------------------------------
@@ -305,7 +354,7 @@ REGISTER_OP("QuantizedResizeBilinear")
       TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 0, &max_shape));
       c->set_output(1, c->MakeShape({}));
       c->set_output(2, c->MakeShape({}));
-      return Status::OK();
+      return OkStatus();
     });
 
 // --------------------------------------------------------------------------
@@ -318,7 +367,7 @@ REGISTER_OP("ResizeBilinearGrad")
     .Attr("half_pixel_centers: bool = false")
     .SetShapeFn([](InferenceContext* c) {
       c->set_output(0, c->input(1));
-      return Status::OK();
+      return OkStatus();
     });
 
 // --------------------------------------------------------------------------
@@ -333,7 +382,7 @@ REGISTER_OP("ScaleAndTranslateGrad")
     .Attr("antialias: bool = true")
     .SetShapeFn([](InferenceContext* c) {
       c->set_output(0, c->input(1));
-      return Status::OK();
+      return OkStatus();
     });
 
 // --------------------------------------------------------------------------
@@ -353,7 +402,7 @@ REGISTER_OP("ResizeNearestNeighborGrad")
     .Input("grads: T")
     .Input("size: int32")
     .Output("output: T")
-    .Attr("T: {uint8, int8, int32, half, float, double}")
+    .Attr("T: {uint8, int8, int32, half, float, double, bfloat16}")
     .Attr("align_corners: bool = false")
     .Attr("half_pixel_centers: bool = false")
     .SetShapeFn([](InferenceContext* c) {
@@ -375,7 +424,7 @@ REGISTER_OP("ResizeNearestNeighborGrad")
             c->ReplaceDim(input, 2, c->MakeDim(size_vec(1)), &input));
       }
       c->set_output(0, input);
-      return Status::OK();
+      return OkStatus();
     });
 
 // --------------------------------------------------------------------------
@@ -403,14 +452,25 @@ REGISTER_OP("RandomCrop")
         h = c->UnknownDim();
         w = c->UnknownDim();
       } else {
-        auto size_vec = size->vec<int64>();
+        auto size_vec = size->vec<int64_t>();
         h = c->MakeDim(size_vec(0));
         w = c->MakeDim(size_vec(1));
       }
       c->set_output(0, c->MakeShape({h, w, channels}));
-      return Status::OK();
+      return OkStatus();
     });
 // TODO(shlens): Support variable rank in RandomCrop.
+
+// --------------------------------------------------------------------------
+REGISTER_OP("DecodeImage")
+    .Input("contents: string")
+    // Setting `channels` to 0 means using the inherent number of channels in
+    // the image.
+    .Attr("channels: int = 0")
+    .Attr("dtype: {uint8, uint16, float32} = DT_UINT8")
+    .Output("image: dtype")
+    .Attr("expand_animations: bool = true")
+    .SetShapeFn(DecodeImageV2ShapeFn);
 
 // --------------------------------------------------------------------------
 REGISTER_OP("DecodeJpeg")
@@ -442,7 +502,7 @@ REGISTER_OP("DecodeAndCropJpeg")
       DimensionHandle h = c->UnknownDim();
       DimensionHandle w = c->UnknownDim();
 
-      int32 channels;
+      int32_t channels;
       TF_RETURN_IF_ERROR(c->GetAttr("channels", &channels));
       if (channels != 0) {
         if (channels < 0) {
@@ -463,7 +523,7 @@ REGISTER_OP("DecodeAndCropJpeg")
         w = c->MakeDim(crop_window_vec(3));
       }
       c->set_output(0, c->MakeShape({h, w, channels_dim}));
-      return Status::OK();
+      return OkStatus();
     });
 
 // --------------------------------------------------------------------------
@@ -497,7 +557,7 @@ REGISTER_OP("ExtractJpegShape")
       ShapeHandle unused;
       TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 0, &unused));
       c->set_output(0, c->Vector(3));
-      return Status::OK();
+      return OkStatus();
     });
 
 // --------------------------------------------------------------------------
@@ -565,7 +625,7 @@ REGISTER_OP("EncodePng")
     .Attr("T: {uint8, uint16} = DT_UINT8")
     .Input("image: T")
     .Output("contents: string")
-    .SetShapeFn(EncodeImageShapeFn);
+    .SetShapeFn(BatchedEncodeImageShapeFn);
 
 // --------------------------------------------------------------------------
 REGISTER_OP("DecodeBmp")
@@ -584,7 +644,7 @@ REGISTER_OP("DecodeGif")
       c->set_output(0, c->MakeShape({InferenceContext::kUnknownDim,
                                      InferenceContext::kUnknownDim,
                                      InferenceContext::kUnknownDim, 3}));
-      return Status::OK();
+      return OkStatus();
     });
 
 // --------------------------------------------------------------------------
@@ -613,7 +673,7 @@ REGISTER_OP("DrawBoundingBoxes")
       TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 4, &images));
       // Channel depth should be either 1 (GRY), 3 (RGB), or 4 (RGBA).
       if (c->ValueKnown(c->Dim(images, 3))) {
-        int64 depth = c->Value(c->Dim(images, 3));
+        int64_t depth = c->Value(c->Dim(images, 3));
         if (!(depth == 1 || depth == 3 || depth == 4)) {
           return errors::InvalidArgument(
               "Channel depth should be either 1 (GRY), "
@@ -675,7 +735,7 @@ REGISTER_OP("SampleDistortedBoundingBox")
       c->set_output(0, c->Vector(3));
       c->set_output(1, c->Vector(3));
       c->set_output(2, c->MakeShape({1, 1, 4}));
-      return Status::OK();
+      return OkStatus();
     });
 
 REGISTER_OP("SampleDistortedBoundingBoxV2")
@@ -710,7 +770,45 @@ REGISTER_OP("SampleDistortedBoundingBoxV2")
       c->set_output(0, c->Vector(3));
       c->set_output(1, c->Vector(3));
       c->set_output(2, c->MakeShape({1, 1, 4}));
-      return Status::OK();
+      return OkStatus();
+    });
+
+REGISTER_OP("StatelessSampleDistortedBoundingBox")
+    .Input("image_size: T")
+    .Input("bounding_boxes: float")
+    .Input("min_object_covered: float")
+    .Input("seed: Tseed")
+    .Output("begin: T")
+    .Output("size: T")
+    .Output("bboxes: float")
+    .Attr("T: {uint8, int8, int16, int32, int64}")
+    .Attr("Tseed: {int32, int64}")
+    .Attr("aspect_ratio_range: list(float) = [0.75, 1.33]")
+    .Attr("area_range: list(float) = [0.05, 1.0]")
+    .Attr("max_attempts: int = 100")
+    .Attr("use_image_if_no_bounding_boxes: bool = false")
+    .SetShapeFn([](InferenceContext* c) {
+      // Get inputs and validate ranks.
+      ShapeHandle image_size;
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 1, &image_size));
+      ShapeHandle bounding_boxes;
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 3, &bounding_boxes));
+      ShapeHandle min_object_covered;
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 0, &min_object_covered));
+      ShapeHandle seed;
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 1, &seed));
+      // image_size: 1-D with [height, width, channels]
+      // bounding_boxes: 3-D with shape [batch, N, 4]
+      DimensionHandle unused;
+      TF_RETURN_IF_ERROR(c->WithValue(c->Dim(image_size, 0), 3, &unused));
+      TF_RETURN_IF_ERROR(c->WithValue(c->Dim(bounding_boxes, 2), 4, &unused));
+      TF_RETURN_IF_ERROR(c->WithValue(c->Dim(seed, 0), 2, &unused));
+
+      c->set_output(0, c->Vector(3));
+      c->set_output(1, c->Vector(3));
+      c->set_output(2, c->MakeShape({1, 1, 4}));
+
+      return OkStatus();
     });
 
 // --------------------------------------------------------------------------
@@ -837,7 +935,7 @@ REGISTER_OP("CropAndResizeGradImage")
       TF_RETURN_IF_ERROR(c->MakeShapeFromShapeTensor(3, &out));
       TF_RETURN_IF_ERROR(c->WithRank(out, 4, &out));
       c->set_output(0, out);
-      return Status::OK();
+      return OkStatus();
     });
 
 REGISTER_OP("CropAndResizeGradBoxes")
@@ -850,7 +948,7 @@ REGISTER_OP("CropAndResizeGradBoxes")
     .Attr("method: {'bilinear'} = 'bilinear'")
     .SetShapeFn([](InferenceContext* c) {
       c->set_output(0, c->input(2));
-      return Status::OK();
+      return OkStatus();
     });
 
 // --------------------------------------------------------------------------
@@ -878,7 +976,7 @@ REGISTER_OP("NonMaxSuppression")
       TF_RETURN_IF_ERROR(c->WithValue(c->Dim(boxes, 1), 4, &unused));
 
       c->set_output(0, c->Vector(c->UnknownDim()));
-      return Status::OK();
+      return OkStatus();
     });
 
 REGISTER_OP("NonMaxSuppressionV2")
@@ -908,7 +1006,7 @@ REGISTER_OP("NonMaxSuppressionV2")
       TF_RETURN_IF_ERROR(c->WithValue(c->Dim(boxes, 1), 4, &unused));
 
       c->set_output(0, c->Vector(c->UnknownDim()));
-      return Status::OK();
+      return OkStatus();
     });
 
 REGISTER_OP("NonMaxSuppressionV3")
@@ -945,7 +1043,7 @@ REGISTER_OP("NonMaxSuppressionV4")
         c->set_output(0, c->MakeShape({output_dim}));
       }
       c->set_output(1, c->MakeShape({}));
-      return Status::OK();
+      return OkStatus();
     });
 
 REGISTER_OP("NonMaxSuppressionV5")
@@ -974,7 +1072,7 @@ REGISTER_OP("NonMaxSuppressionV5")
       }
 
       c->set_output(2, c->MakeShape({}));
-      return Status::OK();
+      return OkStatus();
     });
 
 REGISTER_OP("NonMaxSuppressionWithOverlaps")
@@ -1006,7 +1104,7 @@ REGISTER_OP("NonMaxSuppressionWithOverlaps")
           c->Merge(c->Dim(overlaps, 0), c->Dim(overlaps, 1), &unused));
 
       c->set_output(0, c->Vector(c->UnknownDim()));
-      return Status::OK();
+      return OkStatus();
     });
 
 REGISTER_OP("CombinedNonMaxSuppression")
@@ -1060,15 +1158,32 @@ REGISTER_OP("GenerateBoundingBoxProposals")
           {c->Dim(scores, 0), post_nms_top_n});  // (N,post_nms_top_n)
       c->set_output(0, roi_shape);
       c->set_output(1, prob_shape);
-      return Status::OK();
+      return OkStatus();
     });
 
-// TODO(ringwalt): Add a "fill_constant" argument for constant mode (default 0).
-// V2 op supports output_shape. V1 op is in contrib.
+// V3 op supports fill_value.
+// V2 op supports output_shape.
+// V1 op is in contrib.
 REGISTER_OP("ImageProjectiveTransformV2")
     .Input("images: dtype")
     .Input("transforms: float32")
     .Input("output_shape: int32")
+    .Attr("dtype: {uint8, int32, int64, float16, float32, float64}")
+    .Attr("interpolation: string")
+    .Attr("fill_mode: string = 'CONSTANT'")
+    .Output("transformed_images: dtype")
+    .SetShapeFn([](InferenceContext* c) {
+      ShapeHandle input;
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 4, &input));
+      return SetOutputToSizedImage(c, c->Dim(input, 0), 2 /* size_input_idx */,
+                                   c->Dim(input, 3));
+    });
+
+REGISTER_OP("ImageProjectiveTransformV3")
+    .Input("images: dtype")
+    .Input("transforms: float32")
+    .Input("output_shape: int32")
+    .Input("fill_value: float32")
     .Attr("dtype: {uint8, int32, int64, float16, float32, float64}")
     .Attr("interpolation: string")
     .Attr("fill_mode: string = 'CONSTANT'")

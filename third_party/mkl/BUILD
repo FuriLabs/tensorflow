@@ -2,83 +2,61 @@ licenses(["notice"])  # 3-Clause BSD
 
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 
-config_setting(
+package(default_visibility = ["//visibility:public"])
+
+alias(
     name = "build_with_mkl",
-    define_values = {
-        "build_with_mkl": "true",
-    },
-    visibility = ["//visibility:public"],
+    actual = "@local_tsl//tsl/mkl:build_with_mkl",
 )
 
-config_setting(
-    name = "build_with_mkl_ml_only",
-    define_values = {
-        "build_with_mkl": "true",
-        "build_with_mkl_ml_only": "true",
-    },
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
+alias(
     name = "build_with_mkl_lnx_x64",
-    define_values = {
-        "build_with_mkl": "true",
-    },
-    values = {
-        "cpu": "k8",
-    },
-    visibility = ["//visibility:public"],
+    actual = "@local_tsl//tsl/mkl:build_with_mkl_lnx_x64",
 )
 
-config_setting(
+alias(
+    name = "build_with_mkl_lnx_openmp",
+    actual = "@local_tsl//tsl/mkl:build_with_mkl_lnx_openmp",
+)
+
+alias(
+    name = "build_with_mkl_windows_openmp",
+    actual = "@local_tsl//tsl/mkl:build_with_mkl_windows_openmp",
+)
+
+alias(
+    name = "build_with_mkl_aarch64",
+    actual = "@local_tsl//tsl/mkl:build_with_mkl_aarch64",
+)
+
+alias(
     name = "enable_mkl",
-    define_values = {
-        "enable_mkl": "true",
-        "build_with_mkl": "true",
-    },
-    visibility = ["//visibility:public"],
+    actual = "@local_tsl//tsl/mkl:enable_mkl",
 )
 
-load(
-    "//third_party/mkl:build_defs.bzl",
-    "if_mkl",
-)
-
-filegroup(
-    name = "LICENSE",
-    srcs = ["MKL_LICENSE"] + select({
-        "@org_tensorflow//tensorflow:linux_x86_64": [
-            "@mkl_linux//:LICENSE",
-        ],
-        "@org_tensorflow//tensorflow:macos": [
-            "@mkl_darwin//:LICENSE",
-        ],
-        "@org_tensorflow//tensorflow:windows": [
-            "@mkl_windows//:LICENSE",
-        ],
-        "//conditions:default": [],
-    }),
-    visibility = ["//visibility:public"],
-)
-
-cc_library(
+alias(
     name = "intel_binary_blob",
-    visibility = ["//visibility:public"],
-    deps = select({
-        "@org_tensorflow//tensorflow:linux_x86_64": [
-            "@mkl_linux//:mkl_headers",
-            "@mkl_linux//:mkl_libs_linux",
-        ],
-        "@org_tensorflow//tensorflow:macos": [
-            "@mkl_darwin//:mkl_headers",
-            "@mkl_darwin//:mkl_libs_darwin",
-        ],
-        "@org_tensorflow//tensorflow:windows": [
-            "@mkl_windows//:mkl_headers",
-            "@mkl_windows//:mkl_libs_windows",
-        ],
-        "//conditions:default": [],
-    }),
+    actual = "@local_tsl//tsl/mkl:intel_binary_blob",
+)
+
+alias(
+    name = "LICENSE",
+    actual = "@local_tsl//tsl/mkl:LICENSE",
+)
+
+alias(
+    name = "mkl_libs_linux",
+    actual = "@local_tsl//tsl/mkl:mkl_libs_linux",
+)
+
+alias(
+    name = "mkl_libs_darwin",
+    actual = "@local_tsl//tsl/mkl:mkl_libs_darwin",
+)
+
+alias(
+    name = "mkl_libs_windows",
+    actual = "@local_tsl//tsl/mkl:mkl_libs_windows",
 )
 
 bzl_library(

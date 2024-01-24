@@ -14,11 +14,12 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/core/framework/node_properties.h"
-#ifdef GOOGLE_CUDA
+#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 #define EIGEN_USE_GPU
 #include "tensorflow/core/common_runtime/gpu/gpu_managed_allocator.h"
 #endif
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -72,17 +73,17 @@ OpsTestBase::OpsTestBase() : device_type_(DEVICE_CPU) {
   auto device = DeviceFactory::NewDevice("CPU", {}, "/job:a/replica:0/task:0");
   CHECK(device) << "Could not create CPU device";
 
-  thread_pool_ = absl::make_unique<thread::ThreadPool>(
+  thread_pool_ = std::make_unique<thread::ThreadPool>(
       Env::Default(), /*name=*/"default", /*num_threads=*/1);
 
   device_ = device.get();
-  device_mgr_ = absl::make_unique<StaticDeviceMgr>(std::move(device));
+  device_mgr_ = std::make_unique<StaticDeviceMgr>(std::move(device));
 
   allocator_ = device_->GetAllocator(AllocatorAttributes());
 
-  flib_def_ = absl::make_unique<FunctionLibraryDefinition>(
-      OpRegistry::Global(), FunctionDefLibrary{});
-  pflr_ = absl::make_unique<ProcessFunctionLibraryRuntime>(
+  flib_def_ = std::make_unique<FunctionLibraryDefinition>(OpRegistry::Global(),
+                                                          FunctionDefLibrary{});
+  pflr_ = std::make_unique<ProcessFunctionLibraryRuntime>(
       device_mgr_.get(), Env::Default(), /*config=*/nullptr,
       TF_GRAPH_DEF_VERSION, flib_def_.get(), OptimizerOptions());
 }
@@ -105,14 +106,8 @@ void OpsTestBase::SetDevice(const DeviceType& device_type,
   CHECK(device_) << "No device provided";
 
   device_ = device.get();
-  device_mgr_ = absl::make_unique<StaticDeviceMgr>(std::move(device));
-  pflr_ = absl::make_unique<ProcessFunctionLibraryRuntime>(
-      device_mgr_.get(), Env::Default(), /*config=*/nullptr,
-      TF_GRAPH_DEF_VERSION, flib_def_.get(), OptimizerOptions(),
-      thread_pool_.get());
-
   device_type_ = device_type;
-#ifdef GOOGLE_CUDA
+#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
   if (device_type == DEVICE_GPU) {
     managed_allocator_.reset(new GpuManagedAllocator());
     allocator_ = managed_allocator_.get();
@@ -122,9 +117,16 @@ void OpsTestBase::SetDevice(const DeviceType& device_type,
   }
 #else
   CHECK_NE(device_type, DEVICE_GPU)
-      << "Requesting GPU on binary compiled without GOOGLE_CUDA.";
+      << "Requesting GPU on binary compiled without GOOGLE_CUDA or "
+         "TENSORFLOW_USE_ROCM.";
   allocator_ = device_->GetAllocator(AllocatorAttributes());
 #endif
+
+  device_mgr_ = std::make_unique<StaticDeviceMgr>(std::move(device));
+  pflr_ = std::make_unique<ProcessFunctionLibraryRuntime>(
+      device_mgr_.get(), Env::Default(), /*config=*/nullptr,
+      TF_GRAPH_DEF_VERSION, flib_def_.get(), OptimizerOptions(),
+      thread_pool_.get());
 }
 
 void OpsTestBase::set_node_def(const NodeDef& node_def) {
@@ -147,10 +149,17 @@ Status OpsTestBase::InitOpWithGraphVersion(int graph_def_version) {
       device_->resource_manager(), props, graph_def_version, &kernel));
   kernel_.reset(kernel);
   input_types_ = kernel_->input_types();
-  return Status::OK();
+  return OkStatus();
 }
 
-Status OpsTestBase::RunOpKernel() {
+static std::function<void(std::function<void()>)>* GetDefaultRunner() {
+  static auto* const default_runner =
+      new std::function<void(std::function<void()>)>(
+          [](const std::function<void()>& f) { f(); });
+  return default_runner;
+}
+
+void OpsTestBase::CreateContext() {
   // Make sure the old OpKernelContext is deleted before the Params
   // it was using.
   context_.reset(nullptr);
@@ -165,18 +174,23 @@ Status OpsTestBase::RunOpKernel() {
   params_.reset(new OpKernelContext::Params);
   params_->device = device_;
   params_->frame_iter = FrameAndIter(0, 0);
-  params_->inputs = &inputs_;
+  params_->inputs = inputs_;
   params_->op_kernel = kernel_.get();
   step_container_.reset(new ScopedStepContainer(0, [](const string&) {}));
   params_->step_container = step_container_.get();
-  std::vector<AllocatorAttributes> attrs;
-  test::SetOutputAttrs(params_.get(), &attrs);
-  checkpoint::TensorSliceReaderCacheWrapper slice_reader_cache_wrapper;
-  params_->slice_reader_cache = &slice_reader_cache_wrapper;
+  test::SetOutputAttrs(params_.get(), &out_alloc_attrs_);
+  params_->slice_reader_cache = &slice_reader_cache_wrapper_;
+  params_->cancellation_manager = &default_cancellation_manager_;
   params_->resource_manager = device_->resource_manager();
   params_->function_library = pflr_->GetFLR(device_->name());
+  params_->runner = GetDefaultRunner();
+  params_->session_metadata = &session_metadata();
 
   context_.reset(new OpKernelContext(params_.get()));
+}
+
+Status OpsTestBase::RunOpKernel() {
+  CreateContext();
   device_->Compute(kernel_.get(), context_.get());
   return context_->status();
 }
@@ -195,7 +209,7 @@ TensorValue OpsTestBase::mutable_input(int input_index) {
 Tensor* OpsTestBase::GetOutput(int output_index) {
   CHECK_LT(output_index, context_->num_outputs());
   Tensor* output = context_->mutable_output(output_index);
-#ifdef GOOGLE_CUDA
+#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
   if (device_type_ == DEVICE_GPU) {
     managed_outputs_.resize(context_->num_outputs());
     // Copy the output tensor to managed memory if we haven't done so.
@@ -216,6 +230,8 @@ Tensor* OpsTestBase::GetOutput(int output_index) {
 }
 
 Allocator* OpsTestBase::allocator() { return allocator_; }
+
+OpKernel* OpsTestBase::op_kernel() { return kernel_.get(); }
 
 const DataTypeVector& OpsTestBase::output_types() const {
   return kernel_->output_types();

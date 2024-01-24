@@ -4,8 +4,9 @@
 load("//tensorflow/lite:build_def.bzl", "tflite_linkopts")
 
 package(
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = ["//visibility:public"],
-    licenses = ["notice"],  # Apache 2.0
+    licenses = ["notice"],
 )
 
 exports_files(glob([
@@ -29,27 +30,18 @@ cc_binary(
     }),
     deps = [
         ":bitmap_helpers",
-        "//tensorflow/lite/c:common",
         "//tensorflow/lite:framework",
         "//tensorflow/lite:string_util",
-        "//tensorflow/lite/delegates/nnapi:nnapi_delegate",
-        "//tensorflow/lite/delegates/xnnpack:xnnpack_delegate",
+        "//tensorflow/lite/c:common",
         "//tensorflow/lite/kernels:builtin_ops",
         "//tensorflow/lite/profiling:profiler",
-        "//tensorflow/lite/tools/evaluation:utils",
+        "//tensorflow/lite/tools:command_line_flags",
+        "//tensorflow/lite/tools:tool_params",
+        "//tensorflow/lite/tools/delegates:delegate_provider_hdr",
+        "//tensorflow/lite/tools/delegates:tflite_execution_providers",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/strings",
-    ] + select({
-        "//tensorflow:android": [
-            "//tensorflow/lite/delegates/gpu:delegate",
-            "//tensorflow/lite/delegates/hexagon:hexagon_delegate",
-        ],
-        "//tensorflow:android_arm64": [
-            "//tensorflow/lite/delegates/gpu:delegate",
-            "//tensorflow/lite/delegates/hexagon:hexagon_delegate",
-        ],
-        "//conditions:default": [],
-    }),
+    ],
 )
 
 cc_library(
@@ -59,8 +51,10 @@ cc_library(
         "bitmap_helpers.h",
         "bitmap_helpers_impl.h",
         "label_image.h",
+        "log.h",
     ],
     deps = [
+        "//tensorflow/core/platform:tstring",
         "//tensorflow/lite:builtin_op_data",
         "//tensorflow/lite:framework",
         "//tensorflow/lite:string",
@@ -93,6 +87,6 @@ cc_test(
     deps = [
         ":bitmap_helpers",
         "//tensorflow/lite/c:common",
-        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )

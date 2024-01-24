@@ -13,10 +13,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_CORE_PROFILER_UTILS_ERRORS_H_
-#define TENSORFLOW_CORE_PROFILER_UTILS_ERRORS_H_
+#ifndef TENSORFLOW_CORE_PROFILER_UTILS_DIAGNOSTICS_H_
+#define TENSORFLOW_CORE_PROFILER_UTILS_DIAGNOSTICS_H_
 
 #include "absl/strings/string_view.h"
+#include "tensorflow/core/platform/macros.h"
 #include "tensorflow/core/profiler/protobuf/diagnostics.pb.h"
 #include "tensorflow/core/profiler/protobuf/op_stats.pb.h"
 
@@ -24,15 +25,15 @@ namespace tensorflow {
 namespace profiler {
 
 // Error message that the visualization is based on incomplete step.
-ABSL_CONST_INIT extern const absl::string_view kErrorIncompleteStep;
+TF_CONST_INIT extern const absl::string_view kErrorIncompleteStep;
 
 // Error message that no step marker is seen and visualization contains no
 // step info.
-ABSL_CONST_INIT extern const absl::string_view kErrorNoStepMarker;
+TF_CONST_INIT extern const absl::string_view kErrorNoStepMarker;
 
-ABSL_CONST_INIT extern const absl::string_view kNoDeviceTraceCollected;
+TF_CONST_INIT extern const absl::string_view kNoDeviceTraceCollected;
 
-ABSL_CONST_INIT extern const absl::string_view kStepsDropped;
+TF_CONST_INIT extern const absl::string_view kStepsDropped;
 
 void PopulateStepDiagnostics(const OpStats& op_stats, Diagnostics* diag);
 
@@ -41,4 +42,4 @@ void PopulateOverviewDiagnostics(const OpStats& op_stats, Diagnostics* diag);
 }  // namespace profiler
 }  // namespace tensorflow
 
-#endif  // TENSORFLOW_CORE_PROFILER_UTILS_ERRORS_H_
+#endif  // TENSORFLOW_CORE_PROFILER_UTILS_DIAGNOSTICS_H_

@@ -14,16 +14,16 @@
 # ==============================================================================
 """Implementation of Cluster Resolvers for Cloud TPUs."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import collections
 import re
 
-from tensorflow.python.distribute.cluster_resolver import cluster_resolver
+from tensorflow.core.protobuf.tpu import topology_pb2
+from tensorflow.python.distribute.cluster_resolver import cluster_resolver as cluster_resolver_lib
+from tensorflow.python.eager import remote
+from tensorflow.python.framework import config as framework_config
 from tensorflow.python.framework import errors
 from tensorflow.python.platform import tf_logging as logging
+from tensorflow.python.tpu import tpu_strategy_util
 from tensorflow.python.tpu import tpu_system_metadata as tpu_system_metadata_lib
 from tensorflow.python.training import server_lib
 from tensorflow.python.util import compat
@@ -41,6 +41,13 @@ def is_running_in_gce():
   return True
 
 
+class _LocalCloudTpuClient(object):
+  """Dummy local Cloud TPU client."""
+
+  def api_available(self):
+    return False
+
+
 _TPU_DEVICE_REGEX = re.compile(
     r'.*task:(?P<host_id>\d+)/.*device:TPU:(?P<core_id>\d+)$')
 _TPU_CONN_RETRIES = 120
@@ -48,7 +55,44 @@ DeviceDetails = collections.namedtuple(
     'DeviceDetails', ['device_map', 'total_cores'])
 
 
-class TPUClusterResolver(cluster_resolver.ClusterResolver):
+def initialize_tpu_system(cluster_resolver=None):
+  """Initialize the TPU devices.
+
+  Args:
+    cluster_resolver: A tf.distribute.cluster_resolver.TPUClusterResolver,
+        which provides information about the TPU cluster.
+  Returns:
+    The tf.tpu.Topology object for the topology of the TPU cluster. If called
+    inside tf.function, it returns the serialized topology object instead.
+
+  Raises:
+    RuntimeError: If running inside a tf.function.
+    NotFoundError: If no TPU devices found in eager mode.
+  """
+  return tpu_strategy_util.initialize_tpu_system_impl(
+      cluster_resolver, TPUClusterResolver)
+
+
+def shutdown_tpu_system(cluster_resolver=None):
+  """Shuts down the TPU devices.
+
+  This will clear all caches, even those that are maintained through sequential
+  calls to tf.tpu.experimental.initialize_tpu_system, such as the compilation
+  cache.
+
+  Args:
+    cluster_resolver: A tf.distribute.cluster_resolver.TPUClusterResolver,
+        which provides information about the TPU cluster.
+
+  Raises:
+    RuntimeError: If no TPU devices found for eager execution or if run in a
+        tf.function.
+  """
+  tpu_strategy_util.shutdown_tpu_system_impl(
+      cluster_resolver, TPUClusterResolver)
+
+
+class TPUClusterResolver(cluster_resolver_lib.ClusterResolver):
   """Cluster Resolver for Google Cloud TPUs.
 
   This is an implementation of cluster resolvers for the Google Cloud TPU
@@ -99,10 +143,8 @@ class TPUClusterResolver(cluster_resolver.ClusterResolver):
       NotFoundError: If no TPU devices found in eager mode.
     """
     resolver = TPUClusterResolver(tpu, zone, project)
-    from tensorflow.python.eager import remote  # pylint: disable=g-import-not-at-top
     remote.connect_to_cluster(resolver)
-    from tensorflow.python.tpu import tpu_strategy_util  # pylint: disable=g-import-not-at-top
-    tpu_strategy_util.initialize_tpu_system(resolver)
+    tpu_strategy_util.initialize_tpu_system_impl(resolver)
     return resolver
 
   @staticmethod
@@ -155,7 +197,8 @@ class TPUClusterResolver(cluster_resolver.ClusterResolver):
     Args:
       tpu: A string corresponding to the TPU to use. It can be the TPU name or
         TPU worker gRPC address. If not set, it will try automatically resolve
-        the TPU address on Cloud TPUs.
+        the TPU address on Cloud TPUs. If set to "local", it will assume that
+        the TPU is directly connected to the VM instead of over the network.
       zone: Zone where the TPUs are located. If omitted or empty, we will assume
         that the zone of the TPU is the same as the zone of the GCE VM, which we
         will try to discover from the GCE metadata service.
@@ -187,15 +230,21 @@ class TPUClusterResolver(cluster_resolver.ClusterResolver):
         Google Cloud environment.
     """
 
-    self._cloud_tpu_client = client.Client(
-        tpu=tpu,
-        zone=zone,
-        project=project,
-        credentials=credentials,
-        service=service,
-        discovery_url=discovery_url)
+    if tpu != 'local':
+      # Default Cloud environment
+      self._cloud_tpu_client = client.Client(
+          tpu=tpu,
+          zone=zone,
+          project=project,
+          credentials=credentials,
+          service=service,
+          discovery_url=discovery_url)
+      self._tpu = self._cloud_tpu_client.name()
+    else:
+      # Directly connected TPU environment
+      self._cloud_tpu_client = _LocalCloudTpuClient()
+      self._tpu = 'local'
 
-    self._tpu = self._cloud_tpu_client.name()
     # By default the task_type is 'worker` and the task_id is 0 (which is the
     # first worker in the task).
     self.task_type = job_name
@@ -205,6 +254,8 @@ class TPUClusterResolver(cluster_resolver.ClusterResolver):
       self._start_local_server()
     else:
       self._coordinator_address = coordinator_address
+
+    self._tpu_topology = None
 
   def __enter__(self):
     self._cloud_tpu_client.enter()
@@ -238,26 +289,39 @@ class TPUClusterResolver(cluster_resolver.ClusterResolver):
       ValueError: If none of the TPUs specified exists.
     """
 
-    cluster_spec = self.cluster_spec()
-    if task_type is not None and task_id is not None:
-      # task_type and task_id is from the function parameter
-      master = cluster_spec.task_address(task_type, task_id)
-    elif self.task_type is not None and self.task_id is not None:
-      # task_type and task_id is from the object
-      master = cluster_spec.task_address(self.task_type, self.task_id)
+    if self._tpu != 'local':
+      cluster_spec = self.cluster_spec()
+      if task_type is not None and task_id is not None:
+        # task_type and task_id is from the function parameter
+        master = cluster_spec.task_address(task_type, task_id)
+      elif self.task_type is not None and self.task_id is not None:
+        # task_type and task_id is from the object
+        master = cluster_spec.task_address(self.task_type, self.task_id)
+      else:
+        # by default we take the first item in the cluster with the right name
+        job_tasks = cluster_spec.job_tasks(self.task_type)
+        if not job_tasks:
+          raise ValueError('No TPUs with the specified names exist.')
+        master = job_tasks[0]
+      return cluster_resolver_lib.format_master_url(master, 'grpc')
     else:
-      # by default we take the first item in the cluster with the right name
-      job_tasks = cluster_spec.job_tasks(self.task_type)
-      if not job_tasks:
-        raise ValueError('No TPUs with the specified names exist.')
-      master = job_tasks[0]
-    return cluster_resolver.format_master_url(master, 'grpc')
+      return ''
 
   def get_master(self):
     return self.master()
 
   def get_job_name(self):
     return self.task_type
+
+  def get_coordination_service_leader(self):
+    """Returns the location for coordination service.
+
+    The coordination service should be located on TPU worker0.
+
+    Returns:
+      A string indicate the location path.
+    """
+    return '/job:' + self.get_job_name() + '/task:0'
 
   def get_tpu_system_metadata(self):
     """Returns the metadata of the TPU system.
@@ -267,8 +331,8 @@ class TPUClusterResolver(cluster_resolver.ClusterResolver):
     ```python
 
     resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='')
-    tpu_system_medata = resolver.get_tpu_system_metadata()
-    num_hosts = tpu_system_medata.num_hosts
+    tpu_system_metadata = resolver.get_tpu_system_metadata()
+    num_hosts = tpu_system_metadata.num_hosts
     ```
 
     Returns:
@@ -298,7 +362,8 @@ class TPUClusterResolver(cluster_resolver.ClusterResolver):
       RuntimeError: If the provided TPU is not healthy.
     """
     ############################################################################
-    # There are 5 potential cases this code must handle:
+    # There are 6 potential cases this code must handle:
+    #  0. [Local case.] When a TPU is connected directly to the VM.
     #  1. [Normal case.] We should resolve the TPU name to a set of tasks, and
     #      a. Create a ClusterSpec that includes the coordinator job
     #      b. Create a ClusterSpec without the coordinator job.
@@ -308,17 +373,19 @@ class TPUClusterResolver(cluster_resolver.ClusterResolver):
     #      b. Create a ClusterSpec without the coordinator
     ############################################################################
 
-    network_endpoints = self._cloud_tpu_client.network_endpoints()
-    worker_list = [
-        '%s:%s' % (endpoint['ipAddress'], endpoint['port'])
-        for endpoint in network_endpoints
-    ]
-    cluster_spec = {self.task_type: worker_list}
-    if self._coordinator_address:
-      # {1, 2}.a
-      cluster_spec[self._coordinator_name] = [self._coordinator_address]
-
-    return server_lib.ClusterSpec(cluster_spec)
+    if self._tpu != 'local':
+      network_endpoints = self._cloud_tpu_client.network_endpoints()
+      worker_list = [
+          '%s:%s' % (endpoint['ipAddress'], endpoint['port'])
+          for endpoint in network_endpoints
+      ]
+      cluster_spec = {self.task_type: worker_list}
+      if self._coordinator_address:
+        # {1, 2}.a
+        cluster_spec[self._coordinator_name] = [self._coordinator_address]
+      return server_lib.ClusterSpec(cluster_spec)
+    else:
+      return server_lib.ClusterSpec({})
 
   def num_accelerators(self,
                        task_type=None,
@@ -340,12 +407,21 @@ class TPUClusterResolver(cluster_resolver.ClusterResolver):
       RuntimeError: If we cannot talk to a TPU worker after retrying or if the
         number of TPU devices per host is different.
     """
+    if self._tpu == 'local':
+      return {
+          'TPU':
+              len([
+                  d for d in framework_config.list_logical_devices()
+                  if d.device_type == 'TPU'
+              ])
+      }
+
     retry_count = 1
     # TODO(b/120564445): Replace with standard library for retries.
     while True:
       try:
         device_details = TPUClusterResolver._get_device_dict_and_cores(
-            cluster_resolver.get_accelerator_devices(
+            cluster_resolver_lib.get_accelerator_devices(
                 self.master(), config_proto=config_proto))
         break
       except errors.DeadlineExceededError:
@@ -360,14 +436,29 @@ class TPUClusterResolver(cluster_resolver.ClusterResolver):
           raise RuntimeError(error_message)
 
     if device_details.total_cores:
-      return {'TPU': TPUClusterResolver._verify_and_return_same_core_count(
-          device_details.device_map)}
+      return {
+          'TPU':
+              TPUClusterResolver._verify_and_return_same_core_count(
+                  device_details.device_map)
+      }
     return {'TPU': 0}
+
+  def set_tpu_topology(self, serialized_tpu_topology):
+    """Sets the tpu topology info stored in this resolver."""
+    self._tpu_topology = topology_pb2.TopologyProto()
+    self._tpu_topology.ParseFromString(serialized_tpu_topology)
+
+  @property
+  def tpu_hardware_feature(self):
+    """Returns the tpu topology info stored."""
+    if self._tpu_topology is None:
+      return self._tpu_topology
+    return self._tpu_topology.tpu_hardware_feature
 
   @property
   def environment(self):
     """Returns the current environment which TensorFlow is running in."""
-    return self._environment
+    return ''
 
   def _start_local_server(self):
     address = compat.as_text(self._cloud_tpu_client.get_local_ip())

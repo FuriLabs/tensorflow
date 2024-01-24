@@ -14,17 +14,12 @@
 # ==============================================================================
 """Tests for sequential_feature_column."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import os
 
 from absl.testing import parameterized
 import numpy as np
 
 from tensorflow.python.client import session
-from tensorflow.python.feature_column import feature_column_lib as fc_lib
 from tensorflow.python.feature_column import feature_column_v2 as fc
 from tensorflow.python.feature_column import sequence_feature_column as sfc
 from tensorflow.python.feature_column import serialization
@@ -76,7 +71,7 @@ class ConcatenateContextInputTest(test.TestCase, parameterized.TestCase):
     context_input = ops.convert_to_tensor(np.arange(100).reshape(10, 10))
     seq_input = math_ops.cast(seq_input, dtype=dtypes.float32)
     context_input = math_ops.cast(context_input, dtype=dtypes.float32)
-    with self.assertRaisesRegexp(ValueError, 'sequence_input must have rank 3'):
+    with self.assertRaisesRegex(ValueError, 'sequence_input must have rank 3'):
       sfc.concatenate_context_input(context_input, seq_input)
 
   @parameterized.named_parameters(
@@ -90,23 +85,23 @@ class ConcatenateContextInputTest(test.TestCase, parameterized.TestCase):
     seq_input = ops.convert_to_tensor(np.arange(100).reshape(5, 5, 4))
     seq_input = math_ops.cast(seq_input, dtype=dtypes.float32)
     context_input = math_ops.cast(context_input, dtype=dtypes.float32)
-    with self.assertRaisesRegexp(ValueError, 'context_input must have rank 2'):
+    with self.assertRaisesRegex(ValueError, 'context_input must have rank 2'):
       sfc.concatenate_context_input(context_input, seq_input)
 
   def test_integer_seq_input_throws_error(self):
     seq_input = ops.convert_to_tensor(np.arange(100).reshape(5, 5, 4))
     context_input = ops.convert_to_tensor(np.arange(100).reshape(10, 10))
     context_input = math_ops.cast(context_input, dtype=dtypes.float32)
-    with self.assertRaisesRegexp(
-        TypeError, 'sequence_input must have dtype float32'):
+    with self.assertRaisesRegex(TypeError,
+                                'sequence_input must have dtype float32'):
       sfc.concatenate_context_input(context_input, seq_input)
 
   def test_integer_context_input_throws_error(self):
     seq_input = ops.convert_to_tensor(np.arange(100).reshape(5, 5, 4))
     context_input = ops.convert_to_tensor(np.arange(100).reshape(10, 10))
     seq_input = math_ops.cast(seq_input, dtype=dtypes.float32)
-    with self.assertRaisesRegexp(
-        TypeError, 'context_input must have dtype float32'):
+    with self.assertRaisesRegex(TypeError,
+                                'context_input must have dtype float32'):
       sfc.concatenate_context_input(context_input, seq_input)
 
 
@@ -129,15 +124,6 @@ def _assert_sparse_tensor_indices_shape(test_case, expected, actual):
 def _get_sequence_dense_tensor(column, features):
   return column.get_sequence_dense_tensor(
       fc.FeatureTransformationCache(features), None)
-
-
-def _get_sequence_dense_tensor_state(column, features):
-  state_manager = fc._StateManagerImpl(
-      fc_lib.DenseFeatures(column), trainable=True)
-  column.create_state(state_manager)
-  dense_tensor, lengths = column.get_sequence_dense_tensor(
-      fc.FeatureTransformationCache(features), state_manager)
-  return dense_tensor, lengths, state_manager
 
 
 def _get_sparse_tensors(column, features):
@@ -378,145 +364,8 @@ class SequenceCategoricalColumnWithVocabularyListTest(
         self, expected, self.evaluate(id_weight_pair.id_tensor))
 
 
-@test_util.run_all_in_graph_and_eager_modes
-class SequenceEmbeddingColumnTest(
-    test.TestCase, parameterized.TestCase):
-
-  @parameterized.named_parameters(
-      {'testcase_name': '2D',
-       'inputs_args': {
-           # example 0, ids [2]
-           # example 1, ids [0, 1]
-           # example 2, ids []
-           # example 3, ids [1]
-           'indices': ((0, 0), (1, 0), (1, 1), (3, 0)),
-           'values': (2, 0, 1, 1),
-           'dense_shape': (4, 2)},
-       'expected': [
-           # example 0, ids [2]
-           [[7., 11.], [0., 0.]],
-           # example 1, ids [0, 1]
-           [[1., 2.], [3., 5.]],
-           # example 2, ids []
-           [[0., 0.], [0., 0.]],
-           # example 3, ids [1]
-           [[3., 5.], [0., 0.]]]},
-      {'testcase_name': '3D',
-       'inputs_args': {
-           # example 0, ids [[2]]
-           # example 1, ids [[0, 1], [2]]
-           # example 2, ids []
-           # example 3, ids [[1], [0, 2]]
-           'indices': ((0, 0, 0), (1, 0, 0), (1, 0, 1), (1, 1, 0),
-                       (3, 0, 0), (3, 1, 0), (3, 1, 1)),
-           'values': (2, 0, 1, 2, 1, 0, 2),
-           'dense_shape': (4, 2, 2)},
-       'expected': [
-           # example 0, ids [[2]]
-           [[7., 11.], [0., 0.]],
-           # example 1, ids [[0, 1], [2]]
-           [[2, 3.5], [7., 11.]],
-           # example 2, ids []
-           [[0., 0.], [0., 0.]],
-           # example 3, ids [[1], [0, 2]]
-           [[3., 5.], [4., 6.5]]]}
-      )
-  def test_get_sequence_dense_tensor(self, inputs_args, expected):
-    inputs = sparse_tensor.SparseTensorValue(**inputs_args)
-    vocabulary_size = 3
-    embedding_dimension = 2
-    embedding_values = (
-        (1., 2.),  # id 0
-        (3., 5.),  # id 1
-        (7., 11.)  # id 2
-    )
-
-    def _initializer(shape, dtype, partition_info=None):
-      self.assertAllEqual((vocabulary_size, embedding_dimension), shape)
-      self.assertEqual(dtypes.float32, dtype)
-      self.assertIsNone(partition_info)
-      return embedding_values
-
-    categorical_column = sfc.sequence_categorical_column_with_identity(
-        key='aaa', num_buckets=vocabulary_size)
-    embedding_column = fc.embedding_column(
-        categorical_column, dimension=embedding_dimension,
-        initializer=_initializer)
-
-    embedding_lookup, _, state_manager = _get_sequence_dense_tensor_state(
-        embedding_column, {'aaa': inputs})
-
-    variables = state_manager._layer.weights
-    self.evaluate(variables_lib.global_variables_initializer())
-    self.assertCountEqual(
-        ('embedding_weights:0',), tuple([v.name for v in variables]))
-    self.assertAllEqual(embedding_values, self.evaluate(variables[0]))
-    self.assertAllEqual(expected, self.evaluate(embedding_lookup))
-
-  @parameterized.named_parameters(
-      {'testcase_name': '2D',
-       'inputs_args': {
-           # example 0, ids [2]
-           # example 1, ids [0, 1]
-           'indices': ((0, 0), (1, 0), (1, 1)),
-           'values': (2, 0, 1),
-           'dense_shape': (2, 2)},
-       'expected_sequence_length': [1, 2]},
-      {'testcase_name': '3D',
-       'inputs_args': {
-           # example 0, ids [[2]]
-           # example 1, ids [[0, 1], [2]]
-           'indices': ((0, 0, 0), (1, 0, 0), (1, 0, 1), (1, 1, 0)),
-           'values': (2, 0, 1, 2),
-           'dense_shape': (2, 2, 2)},
-       'expected_sequence_length': [1, 2]}
-      )
-  def test_sequence_length(self, inputs_args, expected_sequence_length):
-    inputs = sparse_tensor.SparseTensorValue(**inputs_args)
-    vocabulary_size = 3
-
-    categorical_column = sfc.sequence_categorical_column_with_identity(
-        key='aaa', num_buckets=vocabulary_size)
-    embedding_column = fc.embedding_column(
-        categorical_column, dimension=2)
-
-    _, sequence_length, _ = _get_sequence_dense_tensor_state(
-        embedding_column, {'aaa': inputs})
-
-    sequence_length = self.evaluate(sequence_length)
-    self.assertAllEqual(expected_sequence_length, sequence_length)
-    self.assertEqual(np.int64, sequence_length.dtype)
-
-  def test_sequence_length_with_empty_rows(self):
-    """Tests _sequence_length when some examples do not have ids."""
-    vocabulary_size = 3
-    sparse_input = sparse_tensor.SparseTensorValue(
-        # example 0, ids []
-        # example 1, ids [2]
-        # example 2, ids [0, 1]
-        # example 3, ids []
-        # example 4, ids [1]
-        # example 5, ids []
-        indices=((1, 0), (2, 0), (2, 1), (4, 0)),
-        values=(2, 0, 1, 1),
-        dense_shape=(6, 2))
-    expected_sequence_length = [0, 1, 2, 0, 1, 0]
-
-    categorical_column = sfc.sequence_categorical_column_with_identity(
-        key='aaa', num_buckets=vocabulary_size)
-    embedding_column = fc.embedding_column(
-        categorical_column, dimension=2)
-
-    _, sequence_length, _ = _get_sequence_dense_tensor_state(
-        embedding_column, {'aaa': sparse_input})
-
-    self.assertAllEqual(
-        expected_sequence_length, self.evaluate(sequence_length))
-
-
 class SequenceSharedEmbeddingColumnTest(test.TestCase):
 
-  @test_util.run_deprecated_v1
   def test_get_sequence_dense_tensor(self):
     vocabulary_size = 3
     embedding_dimension = 2
@@ -532,67 +381,68 @@ class SequenceSharedEmbeddingColumnTest(test.TestCase):
       self.assertIsNone(partition_info)
       return embedding_values
 
-    sparse_input_a = sparse_tensor.SparseTensorValue(
-        # example 0, ids [2]
-        # example 1, ids [0, 1]
-        # example 2, ids []
-        # example 3, ids [1]
-        indices=((0, 0), (1, 0), (1, 1), (3, 0)),
-        values=(2, 0, 1, 1),
-        dense_shape=(4, 2))
-    sparse_input_b = sparse_tensor.SparseTensorValue(
-        # example 0, ids [1]
-        # example 1, ids [0, 2]
-        # example 2, ids [0]
-        # example 3, ids []
-        indices=((0, 0), (1, 0), (1, 1), (2, 0)),
-        values=(1, 0, 2, 0),
-        dense_shape=(4, 2))
+    with ops.Graph().as_default():
+      sparse_input_a = sparse_tensor.SparseTensorValue(
+          # example 0, ids [2]
+          # example 1, ids [0, 1]
+          # example 2, ids []
+          # example 3, ids [1]
+          indices=((0, 0), (1, 0), (1, 1), (3, 0)),
+          values=(2, 0, 1, 1),
+          dense_shape=(4, 2))
+      sparse_input_b = sparse_tensor.SparseTensorValue(
+          # example 0, ids [1]
+          # example 1, ids [0, 2]
+          # example 2, ids [0]
+          # example 3, ids []
+          indices=((0, 0), (1, 0), (1, 1), (2, 0)),
+          values=(1, 0, 2, 0),
+          dense_shape=(4, 2))
 
-    expected_lookups_a = [
-        # example 0, ids [2]
-        [[7., 11.], [0., 0.]],
-        # example 1, ids [0, 1]
-        [[1., 2.], [3., 5.]],
-        # example 2, ids []
-        [[0., 0.], [0., 0.]],
-        # example 3, ids [1]
-        [[3., 5.], [0., 0.]],
-    ]
+      expected_lookups_a = [
+          # example 0, ids [2]
+          [[7., 11.], [0., 0.]],
+          # example 1, ids [0, 1]
+          [[1., 2.], [3., 5.]],
+          # example 2, ids []
+          [[0., 0.], [0., 0.]],
+          # example 3, ids [1]
+          [[3., 5.], [0., 0.]],
+      ]
 
-    expected_lookups_b = [
-        # example 0, ids [1]
-        [[3., 5.], [0., 0.]],
-        # example 1, ids [0, 2]
-        [[1., 2.], [7., 11.]],
-        # example 2, ids [0]
-        [[1., 2.], [0., 0.]],
-        # example 3, ids []
-        [[0., 0.], [0., 0.]],
-    ]
+      expected_lookups_b = [
+          # example 0, ids [1]
+          [[3., 5.], [0., 0.]],
+          # example 1, ids [0, 2]
+          [[1., 2.], [7., 11.]],
+          # example 2, ids [0]
+          [[1., 2.], [0., 0.]],
+          # example 3, ids []
+          [[0., 0.], [0., 0.]],
+      ]
 
-    categorical_column_a = sfc.sequence_categorical_column_with_identity(
-        key='aaa', num_buckets=vocabulary_size)
-    categorical_column_b = sfc.sequence_categorical_column_with_identity(
-        key='bbb', num_buckets=vocabulary_size)
-    shared_embedding_columns = fc.shared_embedding_columns_v2(
-        [categorical_column_a, categorical_column_b],
-        dimension=embedding_dimension,
-        initializer=_initializer)
+      categorical_column_a = sfc.sequence_categorical_column_with_identity(
+          key='aaa', num_buckets=vocabulary_size)
+      categorical_column_b = sfc.sequence_categorical_column_with_identity(
+          key='bbb', num_buckets=vocabulary_size)
+      shared_embedding_columns = fc.shared_embedding_columns_v2(
+          [categorical_column_a, categorical_column_b],
+          dimension=embedding_dimension,
+          initializer=_initializer)
 
-    embedding_lookup_a = _get_sequence_dense_tensor(
-        shared_embedding_columns[0], {'aaa': sparse_input_a})[0]
-    embedding_lookup_b = _get_sequence_dense_tensor(
-        shared_embedding_columns[1], {'bbb': sparse_input_b})[0]
+      embedding_lookup_a = _get_sequence_dense_tensor(
+          shared_embedding_columns[0], {'aaa': sparse_input_a})[0]
+      embedding_lookup_b = _get_sequence_dense_tensor(
+          shared_embedding_columns[1], {'bbb': sparse_input_b})[0]
 
-    self.evaluate(variables_lib.global_variables_initializer())
-    global_vars = ops.get_collection(ops.GraphKeys.GLOBAL_VARIABLES)
-    self.assertItemsEqual(('aaa_bbb_shared_embedding:0',),
-                          tuple([v.name for v in global_vars]))
-    self.assertAllEqual(embedding_values, self.evaluate(global_vars[0]))
-    self.assertAllEqual(
-        expected_lookups_a, self.evaluate(embedding_lookup_a))
-    self.assertAllEqual(expected_lookups_b, self.evaluate(embedding_lookup_b))
+      self.evaluate(variables_lib.global_variables_initializer())
+      global_vars = ops.get_collection(ops.GraphKeys.GLOBAL_VARIABLES)
+      self.assertCountEqual(('aaa_bbb_shared_embedding:0',),
+                            tuple([v.name for v in global_vars]))
+      self.assertAllEqual(embedding_values, self.evaluate(global_vars[0]))
+      self.assertAllEqual(
+          expected_lookups_a, self.evaluate(embedding_lookup_a))
+      self.assertAllEqual(expected_lookups_b, self.evaluate(embedding_lookup_b))
 
   def test_sequence_length(self):
     with ops.Graph().as_default():
@@ -811,20 +661,20 @@ class SequenceNumericColumnTest(test.TestCase, parameterized.TestCase):
     self.assertEqual((1, 2), a.shape)
 
   def test_shape_must_be_positive_integer(self):
-    with self.assertRaisesRegexp(TypeError, 'shape dimensions must be integer'):
+    with self.assertRaisesRegex(TypeError, 'shape dimensions must be integer'):
       sfc.sequence_numeric_column('aaa', shape=[1.0])
 
-    with self.assertRaisesRegexp(
-        ValueError, 'shape dimensions must be greater than 0'):
+    with self.assertRaisesRegex(ValueError,
+                                'shape dimensions must be greater than 0'):
       sfc.sequence_numeric_column('aaa', shape=[0])
 
   def test_dtype_is_convertible_to_float(self):
-    with self.assertRaisesRegexp(
-        ValueError, 'dtype must be convertible to float'):
+    with self.assertRaisesRegex(ValueError,
+                                'dtype must be convertible to float'):
       sfc.sequence_numeric_column('aaa', dtype=dtypes.string)
 
   def test_normalizer_fn_must_be_callable(self):
-    with self.assertRaisesRegexp(TypeError, 'must be a callable'):
+    with self.assertRaisesRegex(TypeError, 'must be a callable'):
       sfc.sequence_numeric_column('aaa', normalizer_fn='NotACallable')
 
   @parameterized.named_parameters(

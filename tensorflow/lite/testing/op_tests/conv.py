@@ -13,12 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 """Test configs for conv."""
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import numpy as np
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 from tensorflow.lite.testing.zip_test_utils import create_tensor_data
 from tensorflow.lite.testing.zip_test_utils import make_zip_of_tests
 from tensorflow.lite.testing.zip_test_utils import register_make_test_function
@@ -39,6 +35,20 @@ def make_conv_tests(options):
           "constant_filter": [True, False],
           "channel_multiplier": [1, 2],
           "fully_quantize": [False],
+          "quant_16x8": [False],
+          "dynamic_range_quantize": [False]
+      },
+      {
+          "input_shape": [[1, 3, 4, 3]],
+          "filter_shape": [[1, 1], [2, 3]],
+          "strides": [[1, 1, 1, 1]],
+          "dilations": [[1, 1, 1, 1]],
+          "padding": ["SAME"],
+          "data_format": ["NHWC"],
+          "constant_filter": [True],
+          "channel_multiplier": [1, 2],
+          "fully_quantize": [True],
+          "quant_16x8": [True],
           "dynamic_range_quantize": [False],
       },
       # TODO(b/134702301): The fully_quantize param is just ignored by the MLIR
@@ -54,7 +64,8 @@ def make_conv_tests(options):
           "constant_filter": [True],
           "channel_multiplier": [1, 2],
           "fully_quantize": [True],
-          "dynamic_range_quantize": [False],
+          "quant_16x8": [False],
+          "dynamic_range_quantize": [False]
       },
       {
           "input_shape": [[1, 3, 4, 3]],
@@ -66,7 +77,21 @@ def make_conv_tests(options):
           "constant_filter": [True],
           "channel_multiplier": [2],
           "fully_quantize": [False],
-          "dynamic_range_quantize": [True],
+          "quant_16x8": [False],
+          "dynamic_range_quantize": [True]
+      },
+      {
+          "input_shape": [[1, 3, 4, 3]],
+          "filter_shape": [[1, 1]],
+          "strides": [[1, 1, 1, 1], [1, 2, 3, 1]],
+          "dilations": [[1, 1, 1, 1]],
+          "padding": [[[0, 0], [1, 1], [1, 1], [0, 0]]],
+          "data_format": ["NHWC"],
+          "constant_filter": [True],
+          "channel_multiplier": [2],
+          "fully_quantize": [False],
+          "quant_16x8": [False],
+          "dynamic_range_quantize": [True]
       },
   ]
 
@@ -96,8 +121,8 @@ def make_conv_tests(options):
       input_tensors = [input_tensor, filter_input]
 
     out = tf.nn.conv2d(
-        input_tensor,
-        filter_input,
+        input=input_tensor,
+        filters=filter_input,
         strides=parameters["strides"],
         dilations=parameters["dilations"],
         padding=parameters["padding"],

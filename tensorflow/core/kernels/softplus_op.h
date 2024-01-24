@@ -19,8 +19,8 @@ limitations under the License.
 // nvcc.
 
 // clang-format off
-#include "tensorflow/core/lib/bfloat16/bfloat16.h"
-#include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
+#include "tensorflow/core/platform/bfloat16.h"
+#include "unsupported/Eigen/CXX11/Tensor"  // from @eigen_archive
 // clang-format on
 #include "tensorflow/core/framework/tensor_types.h"
 

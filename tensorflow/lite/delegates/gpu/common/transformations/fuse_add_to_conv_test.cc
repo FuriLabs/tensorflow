@@ -15,10 +15,20 @@ limitations under the License.
 
 #include "tensorflow/lite/delegates/gpu/common/transformations/fuse_add_to_conv.h"
 
+#include <any>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include "absl/status/status.h"
+#include "tensorflow/lite/delegates/gpu/common/data_type.h"
+#include "tensorflow/lite/delegates/gpu/common/model.h"
+#include "tensorflow/lite/delegates/gpu/common/model_transformer.h"
 #include "tensorflow/lite/delegates/gpu/common/operations.h"
 #include "tensorflow/lite/delegates/gpu/common/shape.h"
+#include "tensorflow/lite/delegates/gpu/common/tensor.h"
 
 using ::testing::FloatNear;
 using ::testing::Pointwise;
@@ -45,7 +55,7 @@ TEST(MergeConvolutionWithAddTest, Smoke) {
   Tensor<Linear, DataType::FLOAT32> add_tensor;
   add_tensor.shape = Linear(16);
   add_tensor.data.resize(16);
-  AddAttributes add_attr;
+  ElementwiseAttributes add_attr;
   add_attr.param = add_tensor;
 
   auto conv_node = graph.NewNode();
@@ -57,11 +67,11 @@ TEST(MergeConvolutionWithAddTest, Smoke) {
 
   ASSERT_TRUE(graph.AddConsumer(conv_node->id, input->id).ok());
 
-  Value* output;
+  Value* output = nullptr;
   ASSERT_TRUE(AddOutput(&graph, add_node, &output).ok());
   output->tensor.shape = BHWC(1, 4, 4, 16);
 
-  Value* link1;
+  Value* link1 = nullptr;
   ASSERT_TRUE(ConnectTwoNodes(&graph, conv_node, add_node, &link1).ok());
   link1->tensor.shape = BHWC(1, 4, 4, 16);
 
@@ -69,7 +79,7 @@ TEST(MergeConvolutionWithAddTest, Smoke) {
   ASSERT_EQ(3, graph.values().size());
 
   auto transformation = NewMergeConvolutionWithAdd();
-  ModelTransformer transformer(&graph, nullptr);
+  ModelTransformer transformer(&graph);
   transformer.Apply("merge_convolution_with_add", transformation.get());
 
   EXPECT_EQ(1, graph.nodes().size());
@@ -88,7 +98,7 @@ TEST(FuseAddAfterConvolution2DTest, Smoke) {
   Tensor<Linear, DataType::FLOAT32> add_tensor;
   add_tensor.shape = Linear(2);
   add_tensor.data = {0.3f, 0.7f};
-  AddAttributes add_attr;
+  ElementwiseAttributes add_attr;
   add_attr.param = add_tensor;
 
   FuseConvolution2DWithAdd(add_attr, &attr);
@@ -109,7 +119,7 @@ TEST(FuseAddAfterDepthwiseConvolution2DTest, Smoke) {
   Tensor<Linear, DataType::FLOAT32> add_tensor;
   add_tensor.shape = Linear(4);
   add_tensor.data = {0.3f, 0.7f, 0.5f, 0.1f};
-  AddAttributes add_attr;
+  ElementwiseAttributes add_attr;
   add_attr.param = add_tensor;
 
   FuseDepthwiseConvolution2DWithAdd(add_attr, &attr);
@@ -131,7 +141,7 @@ TEST(FuseAddAfterConvolutionTransposedTest, Smoke) {
   Tensor<Linear, DataType::FLOAT32> add_tensor;
   add_tensor.shape = Linear(2);
   add_tensor.data = {0.3f, 0.7f};
-  AddAttributes add_attr;
+  ElementwiseAttributes add_attr;
   add_attr.param = add_tensor;
 
   FuseConvolutionTransposedWithAdd(add_attr, &attr);
@@ -152,7 +162,7 @@ TEST(FuseAddAfterFullyConnectedTest, Smoke) {
   Tensor<Linear, DataType::FLOAT32> add_tensor;
   add_tensor.shape = Linear(2);
   add_tensor.data = {0.3f, 0.7f};
-  AddAttributes add_attr;
+  ElementwiseAttributes add_attr;
   add_attr.param = add_tensor;
 
   FuseFullyConnectedWithAdd(add_attr, &attr);
@@ -160,6 +170,64 @@ TEST(FuseAddAfterFullyConnectedTest, Smoke) {
   EXPECT_THAT(attr.weights.data,
               Pointwise(FloatNear(1e-6), {0.1f, 0.2f, 0.3f, 0.4f}));
   EXPECT_THAT(attr.bias.data, Pointwise(FloatNear(1e-6), {1.4f, 1.9f}));
+}
+
+TEST(MergeAddWithConvolutionTest, Smoke) {
+  GraphFloat32 graph;
+  auto input = graph.NewValue();
+  input->tensor.shape = BHWC(1, 4, 4, 2);
+
+  Tensor<Linear, DataType::FLOAT32> add_tensor;
+  add_tensor.shape = Linear(2);
+  add_tensor.data = {1.0f, 2.0f};
+  ElementwiseAttributes add_attr;
+  add_attr.param = add_tensor;
+
+  Convolution2DAttributes conv_attr;
+  conv_attr.padding.prepended = HW(0, 0);
+  conv_attr.padding.appended = HW(0, 0);
+  conv_attr.strides = HW(1, 1);
+  conv_attr.dilations = HW(1, 1);
+  conv_attr.weights.shape = OHWI(2, 1, 2, 2);
+  conv_attr.weights.data = {0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f};
+  conv_attr.bias.shape = Linear(2);
+  conv_attr.bias.data = {1.1f, 1.2f};
+
+  auto conv_node = graph.NewNode();
+  conv_node->operation.type = ToString(OperationType::CONVOLUTION_2D);
+  conv_node->operation.attributes = conv_attr;
+  auto add_node = graph.NewNode();
+  add_node->operation.type = ToString(OperationType::ADD);
+  add_node->operation.attributes = add_attr;
+
+  ASSERT_TRUE(graph.AddConsumer(add_node->id, input->id).ok());
+
+  Value* output = nullptr;
+  ASSERT_TRUE(AddOutput(&graph, conv_node, &output).ok());
+  output->tensor.shape = BHWC(1, 4, 3, 2);
+
+  Value* link1 = nullptr;
+  ASSERT_TRUE(ConnectTwoNodes(&graph, add_node, conv_node, &link1).ok());
+  link1->tensor.shape = BHWC(1, 4, 4, 2);
+
+  ASSERT_EQ(2, graph.nodes().size());
+  ASSERT_EQ(3, graph.values().size());
+
+  auto transformation = NewMergeAddWithConvolution();
+  ModelTransformer transformer(&graph);
+  transformer.Apply("merge_add_with_convolution", transformation.get());
+
+  EXPECT_EQ(1, graph.nodes().size());
+  EXPECT_EQ(2, graph.values().size());
+  EXPECT_EQ(ToString(OperationType::CONVOLUTION_2D),
+            graph.nodes()[0]->operation.type);
+
+  Convolution2DAttributes* conv_attr_new =
+      absl::any_cast<Convolution2DAttributes>(
+          &graph.nodes()[0]->operation.attributes);
+
+  EXPECT_THAT(conv_attr_new->bias.data,
+              Pointwise(FloatNear(1e-6), {2.7f, 5.2f}));
 }
 
 }  // namespace

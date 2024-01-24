@@ -13,13 +13,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include <fstream>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "absl/types/optional.h"
-#include "tensorflow/lite/c/common.h"
+#include "tensorflow/lite/core/c/common.h"
 #include "tensorflow/lite/tools/command_line_flags.h"
-#include "tensorflow/lite/tools/evaluation/evaluation_delegate_provider.h"
 #include "tensorflow/lite/tools/evaluation/proto/evaluation_config.pb.h"
 #include "tensorflow/lite/tools/evaluation/proto/evaluation_stages.pb.h"
 #include "tensorflow/lite/tools/evaluation/stages/inference_profiler_stage.h"
@@ -37,11 +37,14 @@ constexpr char kDelegateFlag[] = "delegate";
 
 class InferenceDiff : public TaskExecutor {
  public:
-  InferenceDiff(int* argc, char* argv[]);
+  InferenceDiff() : num_runs_(50), num_interpreter_threads_(1) {}
   ~InferenceDiff() override {}
 
+ protected:
+  std::vector<Flag> GetFlags() final;
+
   // If the run is successful, the latest metrics will be returned.
-  absl::optional<EvaluationStageMetrics> Run() final;
+  std::optional<EvaluationStageMetrics> RunImpl() final;
 
  private:
   void OutputResult(const EvaluationStageMetrics& latest_metrics) const;
@@ -50,11 +53,9 @@ class InferenceDiff : public TaskExecutor {
   std::string delegate_;
   int num_runs_;
   int num_interpreter_threads_;
-  DelegateProviders delegate_providers_;
 };
 
-InferenceDiff::InferenceDiff(int* argc, char* argv[])
-    : num_runs_(50), num_interpreter_threads_(1) {
+std::vector<Flag> InferenceDiff::GetFlags() {
   // Command Line Flags.
   std::vector<tflite::Flag> flag_list = {
       tflite::Flag::CreateFlag(kModelFileFlag, &model_file_path_,
@@ -70,13 +71,13 @@ InferenceDiff::InferenceDiff(int* argc, char* argv[])
       tflite::Flag::CreateFlag(
           kDelegateFlag, &delegate_,
           "Delegate to use for test inference, if available. "
-          "Must be one of {'nnapi', 'gpu', 'hexagon', 'xnnpack'}"),
+          "Must be one of {'nnapi', 'gpu', 'hexagon', 'xnnpack', 'coreml'}"),
   };
-  tflite::Flags::Parse(argc, const_cast<const char**>(argv), flag_list);
-  delegate_providers_.InitFromCmdlineArgs(argc, const_cast<const char**>(argv));
+
+  return flag_list;
 }
 
-absl::optional<EvaluationStageMetrics> InferenceDiff::Run() {
+std::optional<EvaluationStageMetrics> InferenceDiff::RunImpl() {
   // Initialize evaluation stage.
   EvaluationStageConfig eval_config;
   eval_config.set_name("inference_profiling");
@@ -91,20 +92,20 @@ absl::optional<EvaluationStageMetrics> InferenceDiff::Run() {
   if (!delegate_.empty() &&
       inference_params->delegate() == TfliteInferenceParams::NONE) {
     TFLITE_LOG(WARN) << "Unsupported TFLite delegate: " << delegate_;
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   InferenceProfilerStage eval(eval_config);
-  if (eval.Init(&delegate_providers_) != kTfLiteOk) return absl::nullopt;
+  if (eval.Init(&delegate_providers_) != kTfLiteOk) return std::nullopt;
 
   // Run inference & check diff for specified number of runs.
   for (int i = 0; i < num_runs_; ++i) {
-    if (eval.Run() != kTfLiteOk) return absl::nullopt;
+    if (eval.Run() != kTfLiteOk) return std::nullopt;
   }
 
   const auto latest_metrics = eval.LatestMetrics();
   OutputResult(latest_metrics);
-  return absl::make_optional(latest_metrics);
+  return std::make_optional(latest_metrics);
 }
 
 void InferenceDiff::OutputResult(
@@ -137,8 +138,8 @@ void InferenceDiff::OutputResult(
   }
 }
 
-std::unique_ptr<TaskExecutor> CreateTaskExecutor(int* argc, char* argv[]) {
-  return std::unique_ptr<TaskExecutor>(new InferenceDiff(argc, argv));
+std::unique_ptr<TaskExecutor> CreateTaskExecutor() {
+  return std::unique_ptr<TaskExecutor>(new InferenceDiff());
 }
 
 }  // namespace evaluation

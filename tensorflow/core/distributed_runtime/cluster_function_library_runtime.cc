@@ -15,9 +15,12 @@ limitations under the License.
 #include "tensorflow/core/distributed_runtime/cluster_function_library_runtime.h"
 
 #include <map>
+#include <memory>
+#include <utility>
+#include <vector>
 
-#include "tensorflow/core/common_runtime/function.h"
-#include "tensorflow/core/common_runtime/process_function_library_runtime.h"
+#include "tensorflow/core/common_runtime/function_def_utils.h"
+#include "tensorflow/core/common_runtime/inline_function_utils.h"
 #include "tensorflow/core/distributed_runtime/worker_session.h"
 #include "tensorflow/core/framework/function.h"
 #include "tensorflow/core/framework/graph_def_util.h"
@@ -26,7 +29,6 @@ limitations under the License.
 #include "tensorflow/core/framework/tensor.pb.h"
 #include "tensorflow/core/graph/node_builder.h"
 #include "tensorflow/core/lib/gtl/cleanup.h"
-#include "tensorflow/core/lib/random/random.h"
 #include "tensorflow/core/protobuf/named_tensor.pb.h"
 #include "tensorflow/core/protobuf/worker.pb.h"
 
@@ -102,9 +104,8 @@ Status ClusterFunctionLibraryRuntime::ConstructFunctionGraph(
   for (const auto& p : attrs) {
     (*function_node_def.mutable_attr())[p.first] = p.second;
   }
-  Status status;
-  Node* function_node = g.AddNode(std::move(function_node_def), &status);
-  TF_RETURN_IF_ERROR(status);
+  TF_ASSIGN_OR_RETURN(Node * function_node,
+                      g.AddNode(std::move(function_node_def)));
   for (size_t i = 0; i < input_nodes.size(); ++i) {
     g.AddEdge(input_nodes[i], 0, function_node, i);
   }
@@ -168,7 +169,7 @@ Status ClusterFunctionLibraryRuntime::ConstructFunctionGraph(
   // from the library.
   *(gdef->mutable_library()) = flib_def.ReachableDefinitions(*gdef).ToProto();
 
-  return Status::OK();
+  return OkStatus();
 }
 
 ClusterFunctionLibraryRuntime::~ClusterFunctionLibraryRuntime() {
@@ -208,7 +209,7 @@ void ClusterFunctionLibraryRuntime::Instantiate(
     const OpDef& sig = fdef->signature();
     TF_RETURN_IF_ERROR(ConstructFunctionGraph(sig, attrs, options, *lib_def,
                                               &gdef, send_keys, recv_keys));
-    return Status::OK();
+    return OkStatus();
   };
   Status s;
   if (options.lib_def) {
@@ -333,12 +334,12 @@ void ClusterFunctionLibraryRuntime::Run(
 void ClusterFunctionLibraryRuntime::Run(
     const FunctionLibraryRuntime::Options& opts,
     FunctionLibraryRuntime::LocalHandle handle,
-    gtl::ArraySlice<FunctionArg> args, std::vector<Tensor>* rets,
+    gtl::ArraySlice<FunctionArg> args, std::vector<FunctionRet>* rets,
     FunctionLibraryRuntime::DoneCallback done) {
   std::vector<Tensor> tensors;
   for (const auto& arg : args) {
     if (arg.index() == 0) {
-      tensors.push_back(absl::get<Tensor>(arg));
+      tensors.push_back(std::get<Tensor>(arg));
     } else {
       done(
           errors::Internal("ClusterFunctionLibraryRuntime doesn't support "
@@ -346,7 +347,17 @@ void ClusterFunctionLibraryRuntime::Run(
       return;
     }
   }
-  return Run(opts, handle, tensors, rets, std::move(done));
+  std::vector<Tensor>* ret_tensors = new std::vector<Tensor>;
+  return Run(opts, handle, tensors, ret_tensors,
+             [rets, ret_tensors, done = std::move(done)](const Status& s) {
+               if (s.ok()) {
+                 for (const auto& t : *ret_tensors) {
+                   rets->push_back(t);
+                 }
+               }
+               delete ret_tensors;
+               done(s);
+             });
 }
 
 void ClusterFunctionLibraryRuntime::CleanUp(

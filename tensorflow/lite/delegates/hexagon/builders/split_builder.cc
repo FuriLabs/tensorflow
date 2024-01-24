@@ -18,7 +18,7 @@ limitations under the License.
 
 #include <limits>
 
-#include "tensorflow/lite/c/builtin_op_data.h"
+#include "tensorflow/lite/core/c/builtin_op_data.h"
 #include "tensorflow/lite/delegates/hexagon/hexagon_nn/hexagon_nn.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 
@@ -35,32 +35,24 @@ TfLiteStatus SplitOpBuilder::PopulateSubGraph(const TfLiteIntArray* inputs,
   const int axis_tensor_id = inputs->data[0];
   const auto& axis = context->tensors[axis_tensor_id];
   if (axis.allocation_type != kTfLiteMmapRo) {
-    context->ReportError(context,
-                         "Axis tensor doesn't have correct allocation type: %s",
-                         axis.name);
+    TF_LITE_KERNEL_LOG(context,
+                       "Axis tensor doesn't have correct allocation type: %s",
+                       axis.name);
     return kTfLiteError;
   }
+  int axis_value = axis.data.i32[0];
+  if (axis_value < 0) axis_value += input_tensor.dims->size;
   // We pad Hexagon tensor dimensions with 1 if dims.size < 4.
   // (4 - input_tensor.dims->size) helps maps the input axis value in such
   // cases.
-  int axis_value = axis.data.i32[0] + (4 - input_tensor.dims->size);
-  if (axis_value < 0) {
-    axis_value += input_tensor.dims->size;
-  }
+  axis_value += (4 - input_tensor.dims->size);
   auto* input_axis_const = graph_builder_->AddConstNodeWithData(
       kScalarShape, reinterpret_cast<char*>(&axis_value), sizeof(int));
   AddInput(TensorID(input_axis_const->GetID(), 0));
 
   // Input data tensor & min/max.
   AddInput(graph_builder_->GetHexagonTensorId(input_tensor_id));
-  TF_LITE_ENSURE_STATUS(
-      ComputeMinAndMaxQuantValues(input_tensor, &input_min_, &input_max_));
-  auto* input_min_const = graph_builder_->AddConstNodeWithData(
-      kScalarShape, reinterpret_cast<char*>(&input_min_), sizeof(input_min_));
-  auto* input_max_const = graph_builder_->AddConstNodeWithData(
-      kScalarShape, reinterpret_cast<char*>(&input_max_), sizeof(input_max_));
-  AddInput(TensorID(input_min_const->GetID(), 0));
-  AddInput(TensorID(input_max_const->GetID(), 0));
+  TF_LITE_ENSURE_STATUS(ComputeAndAddMinAndMax(context, input_tensor));
 
   // Output data tensors.
   for (int i = 0; i < outputs->size; ++i) {

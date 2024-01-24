@@ -17,34 +17,22 @@ limitations under the License.
 #define TENSORFLOW_CORE_PROFILER_RPC_CLIENT_SAVE_PROFILE_H_
 
 #include <ostream>
+#include <string>
 
 #include "tensorflow/core/platform/status.h"
 #include "tensorflow/core/platform/types.h"
-#include "tensorflow/core/profiler/profiler_service.pb.h"
+#include "tensorflow/core/profiler/protobuf/xplane.pb.h"
+#include "tsl/profiler/protobuf/profiler_service.pb.h"
+#include "tsl/profiler/rpc/client/save_profile.h"
 
 namespace tensorflow {
 namespace profiler {
 
-string GetCurrentTimeStampAsString();
-
-// Returns the profile plugin directory given a logdir to TensorBoard.
-string GetTensorBoardProfilePluginDir(const string& logdir);
-
-// Saves all profiling tool data in a profile to a TensorBoard log directory
-// with the given run name. This writes user-facing log messages to `os`.
-// Note: this function creates a directory even when all fields in
-// ProfileResponse are unset/empty.
-Status SaveTensorboardProfile(const string& logdir, const string& run,
-                              const string& host,
-                              const ProfileResponse& response,
-                              std::ostream* os);
-
-// Gzip the data and save to the specified filepath.
-Status SaveGzippedToolDataToTensorboardProfile(const string& logdir,
-                                               const string& run,
-                                               const string& host,
-                                               const string& tool_name,
-                                               const string& data);
+using tsl::profiler::GetCurrentTimeStampAsString;     // NOLINT
+using tsl::profiler::GetTensorBoardProfilePluginDir;  // NOLINT
+using tsl::profiler::SaveGzippedToolData;             // NOLINT
+using tsl::profiler::SaveProfile;                     // NOLINT
+using tsl::profiler::SaveXSpace;                      // NOLINT
 
 }  // namespace profiler
 }  // namespace tensorflow

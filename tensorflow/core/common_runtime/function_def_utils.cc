@@ -23,6 +23,7 @@ limitations under the License.
 #include "tensorflow/core/framework/node_def_util.h"
 #include "tensorflow/core/graph/control_flow.h"
 #include "tensorflow/core/graph/graph.h"
+#include "tensorflow/core/graph/graph_debug_info_builder.h"
 
 namespace tensorflow {
 
@@ -35,20 +36,46 @@ Status FunctionDefToBodyHelper(
   InstantiationResult result;
   TF_RETURN_IF_ERROR(InstantiateFunction(fdef, attrs, get_func_sig, &result));
 
-  std::unique_ptr<Graph> graph(new Graph(lib_def));
+  auto graph = std::make_unique<Graph>(lib_def);
+
+  auto construction_context_iter = fdef.attr().find("_construction_context");
+  if (construction_context_iter != fdef.attr().end()) {
+    if (construction_context_iter->second.s() == "kEagerRuntime") {
+      graph->SetConstructionContext(ConstructionContext::kEagerRuntime);
+    } else {
+      DCHECK(false) << "Unknown _construction_context attribute: "
+                    << construction_context_iter->second.s();
+    }
+  }
+
   GraphConstructorOptions opts;
   opts.allow_internal_ops = true;
   opts.expect_device_spec = false;
-  TF_RETURN_IF_ERROR(ConvertNodeDefsToGraph(opts, result.nodes, graph.get()));
+
+  TF_RETURN_IF_ERROR(ConvertNodeDefsToGraph(opts, result.nodes, graph.get(),
+                                            /*debug_info=*/nullptr));
+
+  const StackTracesMap* stack_traces =
+      lib_def->GetStackTraces(fdef.signature().name());
+  if (stack_traces) {
+    for (Node* n : graph->nodes()) {
+      if (n) {
+        auto it = stack_traces->find(n->name());
+        if (it != stack_traces->end()) {
+          n->SetStackTrace(it->second);
+        }
+      }
+    }
+  }
 
   // Call BuildControlFlowInfo to validate that this function body has
   // well-formed control flow.
   std::vector<ControlFlowInfo> dummy;
   TF_RETURN_IF_ERROR(BuildControlFlowInfo(graph.get(), &dummy));
 
-  *fbody = absl::make_unique<FunctionBody>(fdef, result.arg_types,
-                                           result.ret_types, graph.release());
-  return Status::OK();
+  *fbody = std::make_unique<FunctionBody>(fdef, result.arg_types,
+                                          result.ret_types, graph.release());
+  return OkStatus();
 }
 
 Status FunctionDefToBodyHelper(const FunctionDef& fdef, const AttrSlice& attrs,

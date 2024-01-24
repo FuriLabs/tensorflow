@@ -14,20 +14,21 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/core/framework/shape_inference.h"
 
+#include <cstdint>
+
 #include "tensorflow/core/framework/bounds_check.h"
-#include "tensorflow/core/framework/node_def.pb.h"
+#include "tensorflow/core/framework/full_type_util.h"
+#include "tensorflow/core/framework/op_def.pb.h"
 #include "tensorflow/core/framework/partial_tensor_shape.h"
 #include "tensorflow/core/framework/tensor_shape.pb.h"
 #include "tensorflow/core/lib/core/errors.h"
-#include "tensorflow/core/lib/strings/numbers.h"
-#include "tensorflow/core/lib/strings/scanner.h"
-#include "tensorflow/core/lib/strings/str_util.h"
+#include "tensorflow/core/util/overflow.h"
 
 namespace tensorflow {
 namespace shape_inference {
 
-constexpr int32 InferenceContext::kUnknownRank;
-constexpr int64 InferenceContext::kUnknownDim;
+constexpr int32_t InferenceContext::kUnknownRank;
+constexpr int64_t InferenceContext::kUnknownDim;
 
 // Same as above, but with PartialTensorShape instead of TensorShapeProto
 InferenceContext::InferenceContext(
@@ -62,14 +63,14 @@ InferenceContext::InferenceContext(
   }
   std::vector<std::unique_ptr<std::vector<ShapeAndType>>> handle_data(
       input_shapes.size());
-  for (int i = 0; i < input_handle_shapes_and_types.size(); ++i) {
+  for (int i = 0, end = input_handle_shapes_and_types.size(); i < end; ++i) {
     const auto& v = input_handle_shapes_and_types[i];
     if (v == nullptr) {
       continue;
     }
     handle_data[i].reset(new std::vector<ShapeAndType>(v->size()));
     auto& new_v = *handle_data[i];
-    for (int j = 0; j < v->size(); ++j) {
+    for (int j = 0, end = v->size(); j < end; ++j) {
       const auto& p = (*v)[j];
       construction_status_.Update(
           MakeShapeFromPartialTensorShape(p.first, &new_v[j].shape));
@@ -123,15 +124,15 @@ Status InferenceContext::set_output(StringPiece output_name,
   } else {
     const int start = result->second.first;
     const int size = result->second.second - start;
-    if (size != shapes.size()) {
-      return errors::InvalidArgument("Must have exactly ", shapes.size(),
-                                     " shapes.");
+    const int shapes_size = shapes.size();
+    if (size != shapes_size) {
+      return errors::InvalidArgument("Must provide exactly ", size, " shapes.");
     }
-    for (int i = 0; i < size; ++i) {
+    for (int i = 0; i < shapes_size; ++i) {
       outputs_[i + start] = shapes[i];
     }
   }
-  return Status::OK();
+  return OkStatus();
 }
 
 Status InferenceContext::input(StringPiece input_name,
@@ -145,7 +146,7 @@ Status InferenceContext::input(StringPiece input_name,
       output->push_back(inputs_[i]);
     }
   }
-  return Status::OK();
+  return OkStatus();
 }
 
 Status InferenceContext::output(StringPiece output_name,
@@ -159,12 +160,19 @@ Status InferenceContext::output(StringPiece output_name,
       output->push_back(outputs_[i]);
     }
   }
-  return Status::OK();
+  return OkStatus();
 }
 
 void InferenceContext::PreInputInit(
     const OpDef& op_def, const std::vector<const Tensor*>& input_tensors,
     const std::vector<ShapeHandle>& input_tensors_as_shapes) {
+  // TODO(mdan): This is also done at graph construction. Run only here instead?
+  Status s = full_type::SpecializeType(attrs_, op_def, ret_types_);
+  if (!s.ok()) {
+    construction_status_ = s;
+    return;
+  }
+
   input_tensors_ = input_tensors;
   input_tensors_as_shapes_ = input_tensors_as_shapes;
 
@@ -181,12 +189,13 @@ void InferenceContext::PreInputInit(
 }
 
 Status InferenceContext::ExpandOutputs(int new_output_size) {
-  if (new_output_size < outputs_.size()) {
+  const int outputs_size = outputs_.size();
+  if (new_output_size < outputs_size) {
     return errors::InvalidArgument("Trying to reduce number of outputs of op.");
   }
   outputs_.resize(new_output_size, nullptr);
   output_handle_shapes_and_types_.resize(new_output_size);
-  return Status::OK();
+  return OkStatus();
 }
 
 void InferenceContext::PostInputInit(
@@ -209,8 +218,8 @@ void InferenceContext::PostInputInit(
     }
     input_handle_shapes_and_types_ = std::move(input_handle_data);
   }
-
-  if (inputs_.size() != num_inputs_from_node_def) {
+  const int inputs_size = inputs_.size();
+  if (inputs_size != num_inputs_from_node_def) {
     construction_status_ = errors::InvalidArgument(
         "Wrong number of inputs passed: ", inputs_.size(), " while ",
         num_inputs_from_node_def, " expected based on NodeDef");
@@ -230,7 +239,7 @@ void InferenceContext::ShapeHandleToProto(ShapeHandle handle,
     return;
   }
 
-  for (int32 i = 0; i < Rank(handle); ++i) {
+  for (int32_t i = 0; i < Rank(handle); ++i) {
     DimensionHandle dim = Dim(handle, i);
     auto* dim_shape = proto->add_dim();
     if (ValueKnown(dim)) {
@@ -253,9 +262,9 @@ DimensionHandle InferenceContext::NumElements(ShapeHandle s) {
   const auto rank = Rank(s);
   if (rank == kUnknownRank) return UnknownDim();
   bool found_unknown = false;
-  int64 size = 1;
+  int64_t size = 1;
   for (int i = 0; i < rank; ++i) {
-    int64 dim_val = Value(Dim(s, i));
+    int64_t dim_val = Value(Dim(s, i));
     if (dim_val == kUnknownDim) {
       found_unknown = true;
     } else if (dim_val == 0) {
@@ -303,15 +312,15 @@ string InferenceContext::DebugString(
   return strings::StrCat("[", absl::StrJoin(pieces, ","), "]");
 }
 
-Status InferenceContext::WithRank(ShapeHandle shape, int64 rank,
+Status InferenceContext::WithRank(ShapeHandle shape, int64_t rank,
                                   ShapeHandle* out) {
   if (rank > kint32max) {
     return errors::InvalidArgument("Rank cannot exceed kint32max");
   }
-  const int32 existing = Rank(shape);
+  const int32_t existing = Rank(shape);
   if (existing == rank) {
     *out = shape;
-    return Status::OK();
+    return OkStatus();
   }
   if (existing == kUnknownRank) {
     std::vector<DimensionHandle> dims;
@@ -328,42 +337,42 @@ Status InferenceContext::WithRank(ShapeHandle shape, int64 rank,
                                  existing);
 }
 
-Status InferenceContext::WithRankAtLeast(ShapeHandle shape, int64 rank,
+Status InferenceContext::WithRankAtLeast(ShapeHandle shape, int64_t rank,
                                          ShapeHandle* out) {
   if (rank > kint32max) {
     return errors::InvalidArgument("Rank cannot exceed kint32max");
   }
-  const int32 existing = Rank(shape);
+  const int32_t existing = Rank(shape);
   if (existing >= rank || existing == kUnknownRank) {
     *out = shape;
-    return Status::OK();
+    return OkStatus();
   }
   *out = nullptr;
   return errors::InvalidArgument("Shape must be at least rank ", rank,
                                  " but is rank ", existing);
 }
 
-Status InferenceContext::WithRankAtMost(ShapeHandle shape, int64 rank,
+Status InferenceContext::WithRankAtMost(ShapeHandle shape, int64_t rank,
                                         ShapeHandle* out) {
   if (rank > kint32max) {
     return errors::InvalidArgument("Rank cannot exceed kint32max");
   }
-  const int32 existing = Rank(shape);
+  const int32_t existing = Rank(shape);
   if (existing <= rank || existing == kUnknownRank) {
     *out = shape;
-    return Status::OK();
+    return OkStatus();
   }
   *out = nullptr;
   return errors::InvalidArgument("Shape must be at most rank ", rank,
                                  " but is rank ", existing);
 }
 
-Status InferenceContext::WithValue(DimensionHandle dim, int64 value,
+Status InferenceContext::WithValue(DimensionHandle dim, int64_t value,
                                    DimensionHandle* out) {
-  const int64 existing = Value(dim);
+  const int64_t existing = Value(dim);
   if (existing == value) {
     *out = dim;
-    return Status::OK();
+    return OkStatus();
   }
   if (existing == kUnknownDim) {
     DimensionHandle d = MakeDim(value);
@@ -404,18 +413,18 @@ Status InferenceContext::Merge(DimensionHandle d0, DimensionHandle d1,
                                DimensionHandle* out) {
   if (d0.SameHandle(d1)) {
     *out = d0;
-    return Status::OK();
+    return OkStatus();
   } else if (!ValueKnown(d1)) {
     *out = d0;
     merged_dims_.emplace_back(d0, d1);
-    return Status::OK();
+    return OkStatus();
   } else if (!ValueKnown(d0)) {
     *out = d1;
     merged_dims_.emplace_back(d0, d1);
-    return Status::OK();
+    return OkStatus();
   } else if (Value(d0) == Value(d1)) {
     *out = d0;
-    return Status::OK();
+    return OkStatus();
   } else {
     *out = nullptr;
     return errors::InvalidArgument("Dimensions must be equal, but are ",
@@ -430,13 +439,13 @@ Status InferenceContext::MergePrefix(ShapeHandle s, ShapeHandle prefix,
   if (!RankKnown(prefix) || !RankKnown(s)) {
     *s_out = s;
     *prefix_out = prefix;
-    return Status::OK();
+    return OkStatus();
   }
-  const int32 rank = Rank(prefix);
+  const int32_t rank = Rank(prefix);
   TF_RETURN_IF_ERROR(WithRankAtLeast(s, rank, &s));
 
   // Merge the prefix dims and create the new output shapes.
-  const int32 rank_s = Rank(s);
+  const int32_t rank_s = Rank(s);
   std::vector<DimensionHandle> dims;
   dims.reserve(std::max(rank, rank_s));
   dims.resize(rank);
@@ -446,7 +455,7 @@ Status InferenceContext::MergePrefix(ShapeHandle s, ShapeHandle prefix,
   *prefix_out = MakeShape(dims);
   for (int i = rank; i < rank_s; ++i) dims.push_back(Dim(s, i));
   *s_out = MakeShape(dims);
-  return Status::OK();
+  return OkStatus();
 }
 
 void InferenceContext::Relax(ShapeHandle s_old, ShapeHandle s_new,
@@ -460,7 +469,7 @@ void InferenceContext::Relax(ShapeHandle s_old, ShapeHandle s_new,
     return;
   }
 
-  const int32 rank = Rank(s_old);
+  const int32_t rank = Rank(s_old);
   if (rank != Rank(s_new)) {
     ForgetMerges();
     *out = UnknownShape();
@@ -498,18 +507,18 @@ Status InferenceContext::Merge(ShapeHandle s0, ShapeHandle s1,
                                ShapeHandle* out) {
   if (s0.SameHandle(s1)) {
     *out = s0;
-    return Status::OK();
+    return OkStatus();
   } else if (!RankKnown(s1)) {
     *out = s0;
     merged_shapes_.emplace_back(s0, s1);
-    return Status::OK();
+    return OkStatus();
   } else if (!RankKnown(s0)) {
     *out = s1;
     merged_shapes_.emplace_back(s0, s1);
-    return Status::OK();
+    return OkStatus();
   }
 
-  const int32 rank = Rank(s0);
+  const int32_t rank = Rank(s0);
   if (rank != Rank(s1)) {
     *out = nullptr;
     return errors::InvalidArgument("Shapes must be equal rank, but are ", rank,
@@ -544,7 +553,7 @@ Status InferenceContext::Merge(ShapeHandle s0, ShapeHandle s1,
 
   if (return_s0 || return_s1) {
     *out = return_s0 ? s0 : s1;
-    return Status::OK();
+    return OkStatus();
   }
 
   // Merge dims.
@@ -563,27 +572,27 @@ Status InferenceContext::Merge(ShapeHandle s0, ShapeHandle s1,
   return s;
 }
 
-Status InferenceContext::Subshape(ShapeHandle s, int64 start,
+Status InferenceContext::Subshape(ShapeHandle s, int64_t start,
                                   ShapeHandle* out) {
-  return Subshape(s, start, std::numeric_limits<int64>::max() /* end */, out);
+  return Subshape(s, start, std::numeric_limits<int64_t>::max() /* end */, out);
 }
 
-Status InferenceContext::Subshape(ShapeHandle s, int64 start, int64 end,
+Status InferenceContext::Subshape(ShapeHandle s, int64_t start, int64_t end,
                                   ShapeHandle* out) {
   return Subshape(s, start, end, 1 /* stride */, out);
 }
 
-Status InferenceContext::Subshape(ShapeHandle s, int64 start, int64 end,
-                                  int64 stride, ShapeHandle* out) {
-  int64 start_in = start;
-  int64 end_in = end;
+Status InferenceContext::Subshape(ShapeHandle s, int64_t start, int64_t end,
+                                  int64_t stride, ShapeHandle* out) {
+  int64_t start_in = start;
+  int64_t end_in = end;
 
-  const int32 rank = Rank(s);
+  const int32_t rank = Rank(s);
   if (start == 0 && stride == 1 &&
       ((RankKnown(s) && end >= rank) ||
-       end == std::numeric_limits<int64>::max())) {
+       end == std::numeric_limits<int64_t>::max())) {
     *out = s;
-    return Status::OK();
+    return OkStatus();
   }
   if (!RankKnown(s)) {
     return ReturnUnknownShape(out);
@@ -638,9 +647,9 @@ Status InferenceContext::Concatenate(ShapeHandle s1, ShapeHandle s2,
   if (!RankKnown(s1) || !RankKnown(s2)) {
     return ReturnUnknownShape(out);
   }
-  const int32 s1_rank = Rank(s1);
-  const int32 s2_rank = Rank(s2);
-  const int32 rank = s1_rank + s2_rank;
+  const int32_t s1_rank = Rank(s1);
+  const int32_t s2_rank = Rank(s2);
+  const int32_t rank = s1_rank + s2_rank;
   std::vector<DimensionHandle> dims;
   dims.reserve(rank);
   for (int i = 0; i < s1_rank; ++i) dims.push_back(Dim(s1, i));
@@ -648,12 +657,12 @@ Status InferenceContext::Concatenate(ShapeHandle s1, ShapeHandle s2,
   return ReturnCreatedShape(dims, out);
 }
 
-Status InferenceContext::ReplaceDim(ShapeHandle s, int64 dim_index_in,
+Status InferenceContext::ReplaceDim(ShapeHandle s, int64_t dim_index_in,
                                     DimensionHandle new_dim, ShapeHandle* out) {
   if (!RankKnown(s)) {
     return ReturnUnknownShape(out);
   }
-  int64 dim_index = dim_index_in;
+  int64_t dim_index = dim_index_in;
   if (dim_index < 0) {
     dim_index = s->dims_.size() + dim_index;
   }
@@ -688,14 +697,14 @@ ShapeHandle InferenceContext::UnknownShape() {
   return shape_manager_.UnknownShape();
 }
 
-ShapeHandle InferenceContext::UnknownShapeOfRank(int64 rank) {
+ShapeHandle InferenceContext::UnknownShapeOfRank(int64_t rank) {
   CHECK_LE(rank, kint32max) << "rank must be less than kint32max";
   if (rank == kUnknownRank) {
     return UnknownShape();
   }
   CHECK_GE(rank, 0) << "rank must not be negative";
   std::vector<DimensionHandle> dims(rank);
-  for (int32 i = 0; i < rank; ++i) {
+  for (int32_t i = 0; i < rank; ++i) {
     dims[i] = UnknownDim();
   }
   return MakeShape(dims);
@@ -717,12 +726,13 @@ Status InferenceContext::MakeShapeFromShapeTensorTreatScalarAsUnknownShape(
   ShapeHandle input_shape;
   TF_RETURN_IF_ERROR(WithRankAtMost(input(input_idx), 1, &input_shape));
 
-  requested_input_tensor_as_partial_shape_[input_idx] = true;
-  if (input_idx < input_tensors_as_shapes_.size() &&
+  request_input_tensor_as_partial_shape(input_idx);
+  const int input_tensors_as_shapes_size = input_tensors_as_shapes_.size();
+  if (input_idx < input_tensors_as_shapes_size &&
       input_tensors_as_shapes_[input_idx].IsSet() &&
       RankKnown(input_tensors_as_shapes_[input_idx])) {
     *out = input_tensors_as_shapes_[input_idx];
-    return Status::OK();
+    return OkStatus();
   }
 
   return InternalMakeShapeFromTensor(
@@ -735,12 +745,13 @@ Status InferenceContext::MakeShapeFromShapeTensor(int input_idx,
   ShapeHandle input_shape;
   TF_RETURN_IF_ERROR(WithRank(input(input_idx), 1, &input_shape));
 
-  requested_input_tensor_as_partial_shape_[input_idx] = true;
-  if (input_idx < input_tensors_as_shapes_.size() &&
+  request_input_tensor_as_partial_shape(input_idx);
+  const int input_tensors_as_shapes_size = input_tensors_as_shapes_.size();
+  if (input_idx < input_tensors_as_shapes_size &&
       input_tensors_as_shapes_[input_idx].IsSet() &&
       RankKnown(input_tensors_as_shapes_[input_idx])) {
     *out = input_tensors_as_shapes_[input_idx];
-    return Status::OK();
+    return OkStatus();
   }
 
   return InternalMakeShapeFromTensor(
@@ -775,6 +786,19 @@ Status InferenceContext::InternalMakeShapeFromTensor(
       return ReturnUnknownShape(out);
     }
     const auto num_dims = Value(shape_dim);
+    // Note: This should be `TensorShape::MaxDimensions()` as we are not able to
+    // materialize shapes with more than this number of dimensions but then
+    // shape inference would fail for operations such as `tf.range`/`tf.ones`,
+    // etc. where the shape is not really materialized, only used during the
+    // inference. Hence, just prevent doing a `reserve` with a very large
+    // argument.
+    const int64_t max_dimensions = 1 << 25;
+    if (num_dims >= max_dimensions) {
+      return errors::Internal(
+          "Cannot create a tensor with ", num_dims,
+          " dimensions, as these would be more than maximum of ",
+          max_dimensions);
+    }
     std::vector<DimensionHandle> dims;
     dims.reserve(num_dims);
     for (int i = 0; i < num_dims; i++) dims.push_back(UnknownDim());
@@ -794,7 +818,7 @@ Status InferenceContext::InternalMakeShapeFromTensor(
       }
       return ReturnUnknownShape(out);
     } else if (t->dtype() == DataType::DT_INT64) {
-      auto flat_t = t->scalar<int64>();
+      auto flat_t = t->scalar<int64_t>();
       if (flat_t() != -1) {
         *out = nullptr;
         return errors::InvalidArgument(
@@ -817,7 +841,7 @@ Status InferenceContext::InternalMakeShapeFromTensor(
     return errors::InvalidArgument(
         "Input tensor must be rank 1, but was rank ", t->shape().dims(), ".",
         ((t->shape().dims() == 0)
-             ? "If it is rank 0 rank 0 it must have statically known value -1 "
+             ? "If it is rank 0 it must have statically known value -1 "
                "(representing an unknown shape). "
              : " "),
         "Saw tensor shape ", t->shape().DebugString());
@@ -826,7 +850,7 @@ Status InferenceContext::InternalMakeShapeFromTensor(
   if (t->dtype() == DataType::DT_INT32) {
     auto flat_t = t->flat<int32>();
     for (int i = 0; i < flat_t.size(); ++i) {
-      const int32 val = flat_t(i);
+      const int32_t val = flat_t(i);
       if (val < -1) {
         return errors::InvalidArgument(
             "Invalid value in tensor used for shape: ", val);
@@ -835,9 +859,9 @@ Status InferenceContext::InternalMakeShapeFromTensor(
       dims.push_back(MakeDim(val));
     }
   } else if (t->dtype() == DataType::DT_INT64) {
-    auto flat_t = t->flat<int64>();
+    auto flat_t = t->flat<int64_t>();
     for (int i = 0; i < flat_t.size(); ++i) {
-      const int64 val = flat_t(i);
+      const int64_t val = flat_t(i);
       if (val < -1) {
         return errors::InvalidArgument(
             "Invalid value in tensor used for shape: ", val);
@@ -877,6 +901,19 @@ Status InferenceContext::MakeShapeFromTensorShape(const TensorShape& shape,
                                          out);
 }
 
+StatusOr<ShapeHandle> InferenceContext::MakeShapeFromShapeTensor(
+    const TensorShape& shape) {
+  ShapeHandle out;
+  TF_RETURN_IF_ERROR(MakeShapeFromTensorShape(shape, &out));
+  return out;
+}
+
+TensorShapeProto InferenceContext::ShapeHandleToProto(ShapeHandle handle) {
+  TensorShapeProto out;
+  ShapeHandleToProto(handle, &out);
+  return out;
+}
+
 Status InferenceContext::MakeShapeFromShapeProto(const TensorShapeProto& proto,
                                                  ShapeHandle* out) {
   *out = nullptr;
@@ -885,31 +922,64 @@ Status InferenceContext::MakeShapeFromShapeProto(const TensorShapeProto& proto,
   return MakeShapeFromPartialTensorShape(partial_shape, out);
 }
 
-Status InferenceContext::GetScalarFromTensor(const Tensor* t, int64* val) {
+Status InferenceContext::GetScalarFromTensor(const Tensor* t, int64_t* val) {
   // Caller must ensure that <t> is not NULL.
   const int rank = t->dims();
   if (rank != 0) {
     return errors::InvalidArgument("Input must be scalar but has rank ", rank);
   }
 
-  if (t->dtype() == DT_INT32) {
+  if (t->dtype() == DataType::DT_INT16) {
+    *val = t->scalar<int16_t>()();
+    return OkStatus();
+  } else if (t->dtype() == DataType::DT_INT32) {
     *val = t->scalar<int32>()();
-    return Status::OK();
-  } else if (t->dtype() == DT_INT64) {
-    *val = t->scalar<int64>()();
-    return Status::OK();
+    return OkStatus();
+  } else if (t->dtype() == DataType::DT_INT64) {
+    *val = t->scalar<int64_t>()();
+    return OkStatus();
   } else {
-    return errors::InvalidArgument("Scalar input must be int32 or int64.");
+    return errors::InvalidArgument(
+        "Scalar input must be int16, int32 or int64.");
+  }
+}
+
+Status InferenceContext::GetScalarFromTensor(const Tensor* t, int64_t idx,
+                                             int64_t* val) {
+  // Caller must ensure that <t> is not NULL.
+  const int rank = t->dims();
+  if (rank != 1) {
+    return errors::InvalidArgument("Input must be 1D but has rank ", rank);
+  }
+
+  if (t->dtype() == DataType::DT_INT32) {
+    auto flat_t = t->flat<int32>();
+    if (idx < 0 || idx >= flat_t.size()) {
+      return errors::InvalidArgument("Invalid index ", idx,
+                                     " for Tensor of size ", flat_t.size());
+    }
+    *val = flat_t(idx);
+    return OkStatus();
+  } else if (t->dtype() == DataType::DT_INT64) {
+    auto flat_t = t->flat<int64_t>();
+    if (idx < 0 || idx >= flat_t.size()) {
+      return errors::InvalidArgument("Invalid index ", idx,
+                                     " for Tensor of size ", flat_t.size());
+    }
+    *val = flat_t(idx);
+    return OkStatus();
+  } else {
+    return errors::InvalidArgument("Tensor input must be int32 or int64.");
   }
 }
 
 // Returns a new dimension whose value is given by a scalar input tensor.
 Status InferenceContext::MakeDimForScalarInput(int idx, DimensionHandle* out) {
-  int64 val;
+  int64_t val;
   const Tensor* t = input_tensor(idx);
   if (t == nullptr) {
     *out = UnknownDim();
-    return Status::OK();
+    return OkStatus();
   }
   TF_RETURN_IF_ERROR(GetScalarFromTensor(t, &val));
   if (val < 0) {
@@ -917,22 +987,22 @@ Status InferenceContext::MakeDimForScalarInput(int idx, DimensionHandle* out) {
                                    idx, ", must be non-negative but is ", val);
   }
   *out = MakeDim(val);
-  return Status::OK();
+  return OkStatus();
 }
 
 Status InferenceContext::MakeDimForScalarInputWithNegativeIndexing(
     int idx, int input_rank, DimensionHandle* out) {
-  int64 val;
+  int64_t val;
   const Tensor* t = input_tensor(idx);
   if (t == nullptr) {
     *out = UnknownDim();
-    return Status::OK();
+    return OkStatus();
   }
   TF_RETURN_IF_ERROR(GetScalarFromTensor(t, &val));
   if (val < 0) {
     if (input_rank < 0) {
       *out = UnknownDim();
-      return Status::OK();
+      return OkStatus();
     } else if (val + input_rank < 0) {
       return errors::InvalidArgument("Dimension size, given by scalar input ",
                                      val, " must be in range [-", input_rank,
@@ -946,20 +1016,20 @@ Status InferenceContext::MakeDimForScalarInputWithNegativeIndexing(
                                    ", ", input_rank, ")");
   }
   *out = MakeDim(val);
-  return Status::OK();
+  return OkStatus();
 }
 
 Status InferenceContext::Divide(DimensionHandle dividend,
                                 DimensionOrConstant divisor,
                                 bool evenly_divisible, DimensionHandle* out) {
-  const int64 divisor_value = Value(divisor);
+  const int64_t divisor_value = Value(divisor);
   if (divisor_value == 1) {
     *out = dividend;
   } else if (!ValueKnown(dividend) ||
              (divisor.dim.IsSet() && !ValueKnown(divisor.dim))) {
     *out = UnknownDim();
   } else {
-    const int64 v = Value(dividend);
+    const int64_t v = Value(dividend);
     if (divisor_value <= 0) {
       return errors::InvalidArgument("Divisor must be positive but is ",
                                      divisor_value);
@@ -971,13 +1041,13 @@ Status InferenceContext::Divide(DimensionHandle dividend,
     }
     *out = MakeDim(v / divisor_value);
   }
-  return Status::OK();
+  return OkStatus();
 }
 
 Status InferenceContext::Add(DimensionHandle first, DimensionOrConstant second,
                              DimensionHandle* out) {
-  const int64 first_value = Value(first);
-  const int64 second_value = Value(second);
+  const int64_t first_value = Value(first);
+  const int64_t second_value = Value(second);
   // Special cases.
   if (first_value == 0) {
     *out = MakeDim(second);
@@ -990,21 +1060,21 @@ Status InferenceContext::Add(DimensionHandle first, DimensionOrConstant second,
     // get pair of values which cannot be store in output. Check below will
     // report error. We still need to avoid undefined behavior of signed
     // overflow and use unsigned addition.
-    const int64 sum = static_cast<uint64>(first_value) + second_value;
+    const int64_t sum = static_cast<uint64>(first_value) + second_value;
     if (sum < 0) {
       return errors::InvalidArgument("Dimension size overflow from adding ",
                                      first_value, " and ", second_value);
     }
     *out = MakeDim(sum);
   }
-  return Status::OK();
+  return OkStatus();
 }
 
 Status InferenceContext::Subtract(DimensionHandle first,
                                   DimensionOrConstant second,
                                   DimensionHandle* out) {
-  const int64 first_value = Value(first);
-  const int64 second_value = Value(second);
+  const int64_t first_value = Value(first);
+  const int64_t second_value = Value(second);
   // Special cases.
   if (second_value == 0) {
     *out = first;
@@ -1020,14 +1090,14 @@ Status InferenceContext::Subtract(DimensionHandle first,
     }
     *out = MakeDim(first_value - second_value);
   }
-  return Status::OK();
+  return OkStatus();
 }
 
 Status InferenceContext::Multiply(DimensionHandle first,
                                   DimensionOrConstant second,
                                   DimensionHandle* out) {
-  const int64 first_value = Value(first);
-  const int64 second_value = Value(second);
+  const int64_t first_value = Value(first);
+  const int64_t second_value = Value(second);
   // Special cases.
   if (first_value == 0) {
     *out = first;
@@ -1041,7 +1111,7 @@ Status InferenceContext::Multiply(DimensionHandle first,
     *out = UnknownDim();
   } else {
     // Invariant: Both values are known and greater than 1.
-    const int64 product = first_value * second_value;
+    const int64_t product = MultiplyWithoutOverflow(first_value, second_value);
     if (product < 0) {
       return errors::InvalidArgument(
           "Negative dimension size caused by overflow when multiplying ",
@@ -1049,13 +1119,13 @@ Status InferenceContext::Multiply(DimensionHandle first,
     }
     *out = MakeDim(product);
   }
-  return Status::OK();
+  return OkStatus();
 }
 
 Status InferenceContext::Min(DimensionHandle first, DimensionOrConstant second,
                              DimensionHandle* out) {
-  const int64 first_value = Value(first);
-  const int64 second_value = Value(second);
+  const int64_t first_value = Value(first);
+  const int64_t second_value = Value(second);
   if (first_value == 0) {
     *out = first;
   } else if (second_value == 0) {
@@ -1069,13 +1139,13 @@ Status InferenceContext::Min(DimensionHandle first, DimensionOrConstant second,
       *out = MakeDim(second);
     }
   }
-  return Status::OK();
+  return OkStatus();
 }
 
 Status InferenceContext::Max(DimensionHandle first, DimensionOrConstant second,
                              DimensionHandle* out) {
-  const int64 first_value = Value(first);
-  const int64 second_value = Value(second);
+  const int64_t first_value = Value(first);
+  const int64_t second_value = Value(second);
   if (first_value == kUnknownDim || second_value == kUnknownDim) {
     *out = UnknownDim();
   } else {
@@ -1085,7 +1155,7 @@ Status InferenceContext::Max(DimensionHandle first, DimensionOrConstant second,
       *out = MakeDim(second);
     }
   }
-  return Status::OK();
+  return OkStatus();
 }
 
 Status InferenceContext::AttachContext(const Status& status) {
@@ -1099,14 +1169,16 @@ Status InferenceContext::AttachContext(const Status& status) {
   std::vector<string> input_from_tensors_str;
   std::vector<string> input_from_tensors_as_shape_str;
   input_from_tensors_as_shape_str.reserve(inputs_.size());
-  for (int i = 0; i < inputs_.size(); ++i) {
+  for (int i = 0, end = inputs_.size(); i < end; ++i) {
+    const int input_tensors_as_shapes_size = input_tensors_as_shapes_.size();
+    const int input_tensors_size = input_tensors_.size();
     if (requested_input_tensor_as_partial_shape_[i] &&
-        i < input_tensors_as_shapes_.size() &&
+        i < input_tensors_as_shapes_size &&
         input_tensors_as_shapes_[i].IsSet() &&
         RankKnown(input_tensors_as_shapes_[i])) {
       input_from_tensors_as_shape_str.push_back(strings::StrCat(
           "input[", i, "] = ", DebugString(input_tensors_as_shapes_[i])));
-    } else if (requested_input_tensor_[i] && i < input_tensors_.size() &&
+    } else if (requested_input_tensor_[i] && i < input_tensors_size &&
                input_tensors_[i] != nullptr) {
       input_from_tensors_str.push_back(strings::StrCat(
           "input[", i, "] = <",
@@ -1128,8 +1200,8 @@ Status InferenceContext::AttachContext(const Status& status) {
   }
 
   strings::StrAppend(&error_context, ".");
-  return Status(status.code(),
-                strings::StrCat(status.error_message(), error_context));
+  return errors::CreateWithUpdatedMessage(
+      status, strings::StrCat(status.message(), error_context));
 }
 
 bool InferenceContext::MergeHandleShapesAndTypes(
@@ -1140,7 +1212,7 @@ bool InferenceContext::MergeHandleShapesAndTypes(
   }
   std::vector<ShapeAndType> new_values(shapes_and_types.size());
   bool refined = false;
-  for (int i = 0; i < shapes_and_types.size(); ++i) {
+  for (int i = 0, end = shapes_and_types.size(); i < end; ++i) {
     const ShapeAndType& existing = (*to_update)[i];
     if (shapes_and_types[i].dtype == existing.dtype) {
       new_values[i].dtype = existing.dtype;
@@ -1164,9 +1236,7 @@ bool InferenceContext::MergeHandleShapesAndTypes(
   if (!refined) {
     return false;
   }
-  for (int i = 0; i < new_values.size(); ++i) {
-    (*to_update)[i] = new_values[i];
-  }
+  to_update->swap(new_values);
   return true;
 }
 
@@ -1199,7 +1269,7 @@ bool InferenceContext::RelaxHandleShapesAndMergeTypes(
     return false;
   }
   std::vector<ShapeAndType> new_values(shapes_and_types.size());
-  for (int i = 0; i < shapes_and_types.size(); ++i) {
+  for (int i = 0, end = shapes_and_types.size(); i < end; ++i) {
     const ShapeAndType& existing = (*to_update)[i];
     if (shapes_and_types[i].dtype == existing.dtype) {
       new_values[i].dtype = existing.dtype;
