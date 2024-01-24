@@ -51,7 +51,7 @@ Build-Depends: debhelper-compat (= 13),
                swig,
                zlib1g-dev,
                nasm
-Standards-Version: 4.5.0
+Standards-Version: 4.6.2
 Vcs-Browser: https://salsa.debian.org/deeplearning-team/tensorflow
 Vcs-Git: https://salsa.debian.org/deeplearning-team/tensorflow.git
 Homepage: https://tensorflow.org/
