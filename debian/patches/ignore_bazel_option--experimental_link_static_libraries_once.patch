@@ -1,0 +1,66 @@
+Author: Andreas Tille <tille@debian.org>
+Last-Update: Wed, 24 Jan 2024 09:04:10 +0100
+Description: Seems current bazel in Debian does not support
+   option --experimental_link_static_libraries_once
+   Thus ignoring it for the moment
+
+--- a/.bazelrc
++++ b/.bazelrc
+@@ -128,7 +128,7 @@ build --define=no_hdfs_support=true
+ build --experimental_cc_shared_library
+ 
+ # cc_shared_library ensures no library is linked statically more than once.
+-build --experimental_link_static_libraries_once=false
++#build --experimental_link_static_libraries_once=false
+ 
+ # Prevent regressions on those two incompatible changes
+ # TODO: remove those flags when they are flipped in the default Bazel version TF uses.
+@@ -196,7 +196,7 @@ build:ios_fat --ios_multi_cpus=armv7,arm
+ # //tensorflow:libtensorflow_framework.so.
+ build:monolithic --define framework_shared_object=false
+ build:monolithic --define tsl_protobuf_header_only=false
+-build:monolithic --experimental_link_static_libraries_once=false  # b/229868128
++#build:monolithic --experimental_link_static_libraries_once=false  # b/229868128
+ 
+ # Please note that MKL on MacOS is still not supported.
+ # If you would like to use a local MKL instead of downloading, please set the
+--- a/third_party/xla/.bazelrc
++++ b/third_party/xla/.bazelrc
+@@ -128,7 +128,7 @@ build --define=no_hdfs_support=true
+ build --experimental_cc_shared_library
+ 
+ # cc_shared_library ensures no library is linked statically more than once.
+-build --experimental_link_static_libraries_once=false
++# build --experimental_link_static_libraries_once=false
+ 
+ # Prevent regressions on those two incompatible changes
+ # TODO: remove those flags when they are flipped in the default Bazel version TF uses.
+@@ -196,7 +196,7 @@ build:ios_fat --ios_multi_cpus=armv7,arm
+ # //tensorflow:libtensorflow_framework.so.
+ build:monolithic --define framework_shared_object=false
+ build:monolithic --define tsl_protobuf_header_only=false
+-build:monolithic --experimental_link_static_libraries_once=false  # b/229868128
++# build:monolithic --experimental_link_static_libraries_once=false  # b/229868128
+ 
+ # Please note that MKL on MacOS is still not supported.
+ # If you would like to use a local MKL instead of downloading, please set the
+--- a/third_party/xla/third_party/tsl/.bazelrc
++++ b/third_party/xla/third_party/tsl/.bazelrc
+@@ -128,7 +128,7 @@ build --define=no_hdfs_support=true
+ build --experimental_cc_shared_library
+ 
+ # cc_shared_library ensures no library is linked statically more than once.
+-build --experimental_link_static_libraries_once=false
++# build --experimental_link_static_libraries_once=false
+ 
+ # Prevent regressions on those two incompatible changes
+ # TODO: remove those flags when they are flipped in the default Bazel version TF uses.
+@@ -196,7 +196,7 @@ build:ios_fat --ios_multi_cpus=armv7,arm
+ # //tensorflow:libtensorflow_framework.so.
+ build:monolithic --define framework_shared_object=false
+ build:monolithic --define tsl_protobuf_header_only=false
+-build:monolithic --experimental_link_static_libraries_once=false  # b/229868128
++# build:monolithic --experimental_link_static_libraries_once=false  # b/229868128
+ 
+ # Please note that MKL on MacOS is still not supported.
+ # If you would like to use a local MKL instead of downloading, please set the
