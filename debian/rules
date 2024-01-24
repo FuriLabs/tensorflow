@@ -6,7 +6,9 @@ export HOME=/tmp
 # not $(CURDIR), that leads to recursive symlinks
 PREFIX=/usr
 LIB_PATH=lib/$(DEB_HOST_MULTIARCH)
-PKG_VERSION=$(shell dpkg-parsechangelog -S version | cut -d- -f1)
+
+include /usr/share/dpkg/default.mk
+
 ifeq (,$(filter terse,$(DEB_BUILD_OPTIONS)))
         BAZELOPTS=-s
 endif
@@ -46,7 +48,7 @@ override_dh_auto_build:
 	#generate pkgconfig files
 	for libname in tensorflow_cc tensorflow_framework; \
 	do \
-		sed -r -e 's/^(Version: ).*$$/\1$(PKG_VERSION)/' debian/lib$${libname}.pc.in > debian/lib$${libname}.pc; \
+		sed -r -e 's/^(Version: ).*$$/\1$(DEB_VERSION_UPSTREAM)/' debian/lib$${libname}.pc.in > debian/lib$${libname}.pc; \
 		sed -i -e 's:@PREFIX@:$(PREFIX):' debian/lib$${libname}.pc; \
 		sed -i -e 's:@LIB_PATH@:$(LIB_PATH):' debian/lib$${libname}.pc; \
 	done
