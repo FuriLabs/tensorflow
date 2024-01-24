@@ -55,6 +55,7 @@ Standards-Version: 4.6.2
 Vcs-Browser: https://salsa.debian.org/deeplearning-team/tensorflow
 Vcs-Git: https://salsa.debian.org/deeplearning-team/tensorflow.git
 Homepage: https://tensorflow.org/
+Rules-Requires-Root: no
 
 # MISSING features: tensorflow lite, tensorflow extended, tensorflow.js
 Package: libtensorflow-framework2
