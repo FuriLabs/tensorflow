@@ -8,6 +8,7 @@ tensorflow (2.15.0-1) UNRELEASED; urgency=medium
   * Rules-Requires-Root: no (routine-update)
   * No tab in license text (routine-update)
   Update lintian override info format in d/source/lintian-overrides on line 1-4.
+  Update renamed lintian tag names in lintian overrides.
 
  -- Andreas Tille <tille@debian.org>  Wed, 24 Jan 2024 09:04:10 +0100
 
