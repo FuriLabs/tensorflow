@@ -16,6 +16,7 @@ tensorflow (2.15.0-1) UNRELEASED; urgency=medium
     machine-readable debian/copyright).
   * Seems current bazel in Debian does not support option
      --experimental_link_static_libraries_once thus ignoring it for the moment
+  * Builds-Depends: s/libcurl4-nss-dev/libcurl4-gnutls-dev | libcurl-ssl-dev/
 
  -- Andreas Tille <tille@debian.org>  Wed, 24 Jan 2024 09:04:10 +0100
 
