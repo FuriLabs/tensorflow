@@ -12,6 +12,7 @@ tensorflow (2.15.0-1) UNRELEASED; urgency=medium
   Set upstream metadata fields: Repository, Security-Contact.
   Remove listed license files (third_party/icu/data/LICENSE) from copyright.
   Remove unused license definitions for BSD-3-Clause, LGPL-2.1+.
+  Remove obsolete field Name from debian/upstream/metadata (already present in machine-readable debian/copyright).
 
  -- Andreas Tille <tille@debian.org>  Wed, 24 Jan 2024 09:04:10 +0100
 
