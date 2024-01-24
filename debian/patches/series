@@ -6,8 +6,7 @@
 #version_info.cc
 skip_deps
 boringssl
-use-jsoncpp-1.9.4
+#use-jsoncpp-1.9.4
 bazelversion.patch
-remove-superceded-bazel2-option
 remove-rpaths-in-bazel.patch
 use-system-highwayhash.patch

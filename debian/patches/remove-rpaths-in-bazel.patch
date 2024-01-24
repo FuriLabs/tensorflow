@@ -1,8 +1,6 @@
-Index: salsa/tensorflow/tensorflow.bzl
-===================================================================
---- salsa.orig/tensorflow/tensorflow.bzl
-+++ salsa/tensorflow/tensorflow.bzl
-@@ -620,7 +620,7 @@ def tf_cc_shared_object(
+--- a/tensorflow/tensorflow.bzl
++++ b/tensorflow/tensorflow.bzl
+@@ -824,7 +824,7 @@ def tf_cc_shared_object(
              deps = deps,
              linkshared = 1,
              data = data + data_extra,

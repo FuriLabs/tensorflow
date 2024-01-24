@@ -1,7 +1,5 @@
-Index: salsa/third_party/systemlibs/highwayhash.BUILD
-===================================================================
 --- /dev/null
-+++ salsa/third_party/systemlibs/highwayhash.BUILD
++++ b/third_party/systemlibs/highwayhash.BUILD
 @@ -0,0 +1,12 @@
 +licenses(["notice"])  # Apache 2.0
 +
@@ -15,10 +13,8 @@ Index: salsa/third_party/systemlibs/highwayhash.BUILD
 +    linkopts = ["-lhighwayhash"],
 +    visibility = ["//visibility:public"],
 +)
-Index: salsa/third_party/systemlibs/syslibs_configure.bzl
-===================================================================
---- salsa.orig/third_party/systemlibs/syslibs_configure.bzl
-+++ salsa/third_party/systemlibs/syslibs_configure.bzl
+--- a/third_party/systemlibs/syslibs_configure.bzl
++++ b/third_party/systemlibs/syslibs_configure.bzl
 @@ -26,6 +26,7 @@ VALID_LIBS = [
      "functools32_archive",
      "gast_archive",
@@ -27,50 +23,14 @@ Index: salsa/third_party/systemlibs/syslibs_configure.bzl
      "hwloc",
      "icu",
      "jsoncpp_git",
-Index: salsa/tensorflow/workspace.bzl
-===================================================================
---- salsa.orig/tensorflow/workspace.bzl
-+++ salsa/tensorflow/workspace.bzl
-@@ -29,7 +29,7 @@ load("//third_party/cpuinfo:workspace.bz
- load("//third_party/dlpack:workspace.bzl", dlpack = "repo")
- load("//third_party/flatbuffers:workspace.bzl", flatbuffers = "repo")
- load("//third_party/hexagon:workspace.bzl", hexagon_nn = "repo")
--load("//third_party/highwayhash:workspace.bzl", highwayhash = "repo")
-+# load("//third_party/highwayhash:workspace.bzl", highwayhash = "repo")
- load("//third_party/hwloc:workspace.bzl", hwloc = "repo")
- load("//third_party/icu:workspace.bzl", icu = "repo")
- load("//third_party/jpeg:workspace.bzl", jpeg = "repo")
-@@ -52,7 +52,6 @@ def initialize_third_party():
-     dlpack()
-     flatbuffers()
-     hexagon_nn()
--    highwayhash()
-     hwloc()
-     icu()
-     kissfft()
-Index: salsa/tensorflow/core/platform/default/BUILD
-===================================================================
---- salsa.orig/tensorflow/core/platform/default/BUILD
-+++ salsa/tensorflow/core/platform/default/BUILD
-@@ -376,7 +376,7 @@ cc_library(
-         "nobuilder",
-     ],
-     textual_hdrs = ["strong_hash.h"],
--    deps = ["@highwayhash//:sip_hash"],
-+    #deps = ["@highwayhash//:sip_hash"],
- )
- 
- cc_library(
-Index: salsa/tensorflow/core/platform/default/build_config/BUILD
-===================================================================
---- salsa.orig/tensorflow/core/platform/default/build_config/BUILD
-+++ salsa/tensorflow/core/platform/default/build_config/BUILD
-@@ -152,7 +152,7 @@ cc_library(
+--- a/tensorflow/core/platform/default/build_config/BUILD
++++ b/tensorflow/core/platform/default/build_config/BUILD
+@@ -18,7 +18,7 @@ cc_library(
          "@com_googlesource_code_re2//:re2",
          "@farmhash_archive//:farmhash",
          "@fft2d",
 -        "@highwayhash//:sip_hash",
 +        #"@highwayhash//:sip_hash",
+         "@local_tsl//tsl/platform/default/build_config:gif",
+         "@local_tsl//tsl/platform/default/build_config:jpeg",
          "@zlib",
-     ],
- )

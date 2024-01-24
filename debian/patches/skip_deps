@@ -9,275 +9,37 @@ So that Bazel won't try to download them
  tensorflow/workspace.bzl | 42 +++++++++---------
  2 files changed, 68 insertions(+), 68 deletions(-)
 
---- a/WORKSPACE
-+++ b/WORKSPACE
-@@ -20,38 +20,38 @@ tf_repositories()
- 
- register_toolchains("@local_config_python//:py_toolchain")
- 
--load("@io_bazel_rules_closure//closure:defs.bzl", "closure_repositories")
--
--closure_repositories()
--
--load("//third_party/toolchains/preconfig/generate:archives.bzl",
--     "bazel_toolchains_archive")
--
--bazel_toolchains_archive()
--
--load(
--    "@bazel_toolchains//repositories:repositories.bzl",
--    bazel_toolchains_repositories = "repositories",
--)
--
--bazel_toolchains_repositories()
--
--load(
--    "@io_bazel_rules_docker//repositories:repositories.bzl",
--    container_repositories = "repositories",
--)
--
--container_repositories()
--
--load("//third_party/toolchains/preconfig/generate:workspace.bzl",
--     "remote_config_workspace")
--
--remote_config_workspace()
-+#load("@io_bazel_rules_closure//closure:defs.bzl", "closure_repositories")
-+#
-+#closure_repositories()
-+
-+# load("//third_party/toolchains/preconfig/generate:archives.bzl",
-+#     "bazel_toolchains_archive")
-+
-+# bazel_toolchains_archive()
-+
-+#load(
-+#    "@bazel_toolchains//repositories:repositories.bzl",
-+#    bazel_toolchains_repositories = "repositories",
-+#)
-+#
-+# bazel_toolchains_repositories()
-+
-+#load(
-+#    "@io_bazel_rules_docker//repositories:repositories.bzl",
-+#    container_repositories = "repositories",
-+#)
-+#
-+#container_repositories()
-+
-+#load("//third_party/toolchains/preconfig/generate:workspace.bzl",
-+#     "remote_config_workspace")
-+#
-+#remote_config_workspace()
- 
- # Use `swift_rules_dependencies` to fetch the toolchains. With the
- # `git_repository` rules above, the following call will skip redefining them.
--load("@build_bazel_rules_swift//swift:repositories.bzl", "swift_rules_dependencies")
--swift_rules_dependencies()
-+# load("@build_bazel_rules_swift//swift:repositories.bzl", "swift_rules_dependencies")
-+# swift_rules_dependencies()
- 
- # We must check the bazel version before trying to parse any other BUILD
- # files, in case the parsing of those build files depends on the bazel
-@@ -59,11 +59,11 @@ swift_rules_dependencies()
- load("//tensorflow:version_check.bzl", "check_bazel_version_at_least")
- check_bazel_version_at_least("1.0.0")
- 
--load("//third_party/android:android_configure.bzl", "android_configure")
--android_configure(name="local_config_android")
--load("@local_config_android//:android.bzl", "android_workspace")
--android_workspace()
--
-+# load("//third_party/android:android_configure.bzl", "android_configure")
-+# android_configure(name="local_config_android")
-+# load("@local_config_android//:android.bzl", "android_workspace")
-+# android_workspace()
-+# 
- # If a target is bound twice, the later one wins, so we have to do tf bindings
- # at the end of the WORKSPACE file.
- load("//tensorflow:workspace.bzl", "tf_bind")
-@@ -124,28 +124,6 @@ http_archive(
- 
- # Required for dependency @com_github_grpc_grpc
- 
--load("@com_github_grpc_grpc//bazel:grpc_deps.bzl", "grpc_deps")
--
--grpc_deps()
--
--load(
--    "@build_bazel_rules_apple//apple:repositories.bzl",
--    "apple_rules_dependencies",
--)
--
--apple_rules_dependencies()
--
--load(
--    "@build_bazel_apple_support//lib:repositories.bzl",
--    "apple_support_dependencies",
--)
--
--apple_support_dependencies()
--
--load("@upb//bazel:repository_defs.bzl", "bazel_version_repository")
--
--bazel_version_repository(name = "bazel_version")
--
- load("//third_party/googleapis:repository_rules.bzl", "config_googleapis")
- 
- config_googleapis()
---- a/tensorflow/workspace.bzl
-+++ b/tensorflow/workspace.bzl
-@@ -17,7 +17,7 @@ load("//third_party:repo.bzl", "tf_http_
- load("//third_party/clang_toolchain:cc_configure_clang.bzl", "cc_download_clang_toolchain")
- load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
- load("@bazel_tools//tools/build_defs/repo:java.bzl", "java_import_external")
--load("@io_bazel_rules_closure//closure:defs.bzl", "filegroup_external")
-+# load("@io_bazel_rules_closure//closure:defs.bzl", "filegroup_external")
- load(
-     "//tensorflow/tools/def_file_filter:def_file_filter_configure.bzl",
-     "def_file_filter_configure",
-@@ -467,16 +467,16 @@ def tf_repositories(path_prefix = "", tf
-         ],
-     )
- 
--    filegroup_external(
--        name = "astunparse_license",
--        licenses = ["notice"],  # PSFL
--        sha256_urls = {
--            "92fc0e4f4fa9460558eedf3412b988d433a2dcbb3a9c45402a145a4fab8a6ac6": [
--                "https://storage.googleapis.com/mirror.tensorflow.org/raw.githubusercontent.com/simonpercivall/astunparse/v1.6.2/LICENSE",
--                "https://raw.githubusercontent.com/simonpercivall/astunparse/v1.6.2/LICENSE",
--            ],
--        },
--    )
-+    #filegroup_external(
-+    #    name = "astunparse_license",
-+    #    licenses = ["notice"],  # PSFL
-+    #    sha256_urls = {
-+    #        "92fc0e4f4fa9460558eedf3412b988d433a2dcbb3a9c45402a145a4fab8a6ac6": [
-+    #            "https://storage.googleapis.com/mirror.tensorflow.org/raw.githubusercontent.com/simonpercivall/astunparse/v1.6.2/LICENSE",
-+    #            "https://raw.githubusercontent.com/simonpercivall/astunparse/v1.6.2/LICENSE",
-+    #        ],
-+    #    },
-+    #)
- 
-     tf_http_archive(
-         name = "functools32_archive",
-@@ -587,16 +587,16 @@ def tf_repositories(path_prefix = "", tf
-         strip_prefix = "tblib-1.3.2",
-     )
- 
--    filegroup_external(
--        name = "org_python_license",
--        licenses = ["notice"],  # Python 2.0
--        sha256_urls = {
--            "e76cacdf0bdd265ff074ccca03671c33126f597f39d0ed97bc3e5673d9170cf6": [
--                "https://storage.googleapis.com/mirror.tensorflow.org/docs.python.org/2.7/_sources/license.rst.txt",
--                "https://docs.python.org/2.7/_sources/license.rst.txt",
--            ],
--        },
--    )
-+    #filegroup_external(
-+    #    name = "org_python_license",
-+    #    licenses = ["notice"],  # Python 2.0
-+    #    sha256_urls = {
-+    #        "e76cacdf0bdd265ff074ccca03671c33126f597f39d0ed97bc3e5673d9170cf6": [
-+    #            "https://storage.googleapis.com/mirror.tensorflow.org/docs.python.org/2.7/_sources/license.rst.txt",
-+    #            "https://docs.python.org/2.7/_sources/license.rst.txt",
-+    #        ],
-+    #    },
-+    #)
- 
-     tf_http_archive(
-         name = "com_google_protobuf",
 --- a/tensorflow/core/example/BUILD
 +++ b/tensorflow/core/example/BUILD
-@@ -1,7 +1,7 @@
+@@ -1,9 +1,9 @@
+ load("//tensorflow:tensorflow.default.bzl", "filegroup")
+ load("//tensorflow/core/platform:rules_cc.bzl", "cc_library")
 -load(
 -    "@io_bazel_rules_closure//closure:defs.bzl",
 -    "closure_proto_library",
 -)
-+# load(
-+#     "@io_bazel_rules_closure//closure:defs.bzl",
-+#     "closure_proto_library",
-+# )
++#load(
++#    "@io_bazel_rules_closure//closure:defs.bzl",
++#    "closure_proto_library",
++#)
  load(
      "//tensorflow:tensorflow.bzl",
      "tf_cc_test",
-@@ -136,11 +136,11 @@ tf_pyclif_proto_library(
-     proto_srcfile = "feature.proto",
+@@ -156,10 +156,10 @@ tf_jspb_proto_library(
+     deps = [":example_protos"],
  )
  
 -closure_proto_library(
 -    name = "example_protos_closure",
--    visibility = ["//visibility:public"],
 -    deps = [":example_protos"],
 -)
-+# closure_proto_library(
-+#     name = "example_protos_closure",
-+#     visibility = ["//visibility:public"],
-+#     deps = [":example_protos"],
-+# )
++#closure_proto_library(
++#    name = "example_protos_closure",
++#    deps = [":example_protos"],
++#)
  
  filegroup(
      name = "mobile_srcs_no_runtime",
---- a/tensorflow/core/kernels/BUILD
-+++ b/tensorflow/core/kernels/BUILD
-@@ -1,4 +1,4 @@
--load("@bazel_skylib//rules:build_test.bzl", "build_test")
-+# load("@bazel_skylib//rules:build_test.bzl", "build_test")
- load(
-     "//tensorflow:tensorflow.bzl",
-     "cc_header_only_library",
-@@ -7207,11 +7207,6 @@ cc_library(
-     alwayslink = 1,
- )
- 
--build_test(
--    name = "android_tensorflow_kernels_build_test",
--    targets = [":portable_tensorflow_kernels"],
--)
--
- cc_library(
-     name = "android_tensorflow_image_op",
-     srcs = if_android(["decode_image_op.cc"]),
-@@ -7227,10 +7222,10 @@ cc_library(
-     alwayslink = 1,
- )
- 
--build_test(
--    name = "android_tensorflow_image_op_build_test",
--    targets = [":android_tensorflow_image_op"],
--)
-+# build_test(
-+#     name = "android_tensorflow_image_op_build_test",
-+#     targets = [":android_tensorflow_image_op"],
-+# )
- 
- cc_library(
-     name = "android_whole_file_read_ops",
---- a/tensorflow/core/platform/default/rules_cc.bzl
-+++ b/tensorflow/core/platform/default/rules_cc.bzl
-@@ -7,13 +7,13 @@ load(
-     _cc_library = "cc_library",
-     _cc_test = "cc_test",
- )
--load(
--    "@rules_cc//examples:experimental_cc_shared_library.bzl",
--    _cc_shared_library = "cc_shared_library",
--)
--
-+# load(
-+#     "@rules_cc//examples:experimental_cc_shared_library.bzl",
-+#     _cc_shared_library = "cc_shared_library",
-+# )
-+# 
- cc_binary = _cc_binary
- cc_import = _cc_import
- cc_library = _cc_library
--cc_shared_library = _cc_shared_library
-+# cc_shared_library = _cc_shared_library
- cc_test = _cc_test
 --- a/tensorflow/core/platform/rules_cc.bzl
 +++ b/tensorflow/core/platform/rules_cc.bzl
 @@ -5,12 +5,12 @@ load(
@@ -295,3 +57,26 @@ So that Bazel won't try to download them
 -cc_shared_library = _cc_shared_library
 +# cc_shared_library = _cc_shared_library
  cc_test = _cc_test
+--- a/tensorflow/core/kernels/BUILD
++++ b/tensorflow/core/kernels/BUILD
+@@ -1,4 +1,4 @@
+-load("@bazel_skylib//rules:build_test.bzl", "build_test")
++#load("@bazel_skylib//rules:build_test.bzl", "build_test")
+ load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda")
+ load(
+     "//tensorflow:tensorflow.bzl",
+@@ -7081,10 +7081,10 @@ cc_library(
+     alwayslink = 1,
+ )
+ 
+-build_test(
+-    name = "portable_tensorflow_kernels_build_test",
+-    targets = [":portable_tensorflow_kernels"],
+-)
++#build_test(
++#    name = "portable_tensorflow_kernels_build_test",
++#    targets = [":portable_tensorflow_kernels"],
++#)
+ 
+ cc_library(
+     name = "android_whole_file_read_ops",
