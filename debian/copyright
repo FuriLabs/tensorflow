@@ -29,19 +29,19 @@ Comment:
            we either disable that feature, or use the version already
            provided in the archive. Exceptions listed in this file.
            third_party/fft2d/LICENSE
-	   third_party/gpus/crosstool/LICENSE
-	   third_party/gpus/cuda/LICENSE
-	   third_party/hadoop/LICENSE.txt
-	   third_party/hexagon/LICENSE
-	   third_party/mkl/LICENSE
-	   third_party/mkl/MKL_LICENSE
+           third_party/gpus/crosstool/LICENSE
+           third_party/gpus/cuda/LICENSE
+           third_party/hadoop/LICENSE.txt
+           third_party/hexagon/LICENSE
+           third_party/mkl/LICENSE
+           third_party/mkl/MKL_LICENSE
            third_party/mkl_dnn/LICENSE
            third_party/ngraph/NGRAPH_LICENSE
-	   third_party/ngraph/LICENSE
+           third_party/ngraph/LICENSE
            third_party/nccl/LICENSE
-	   third_party/py/numpy/LICENSE
+           third_party/py/numpy/LICENSE
            third_party/sycl/sycl/LICENSE.text
-	   third_party/tensorrt/LICENSE
+           third_party/tensorrt/LICENSE
            are all bare licence texts
 License:   Apache-2.0
 
@@ -55,7 +55,7 @@ Copyright: 2014-2015, Benoit Steiner <benoit.steiner.goog@gmail.com>
 License:   MPL-2.0
 
 Files:     third_party/icu/data/LICENSE
-	   third_party/icu/data/*
+           third_party/icu/data/*
 Copyright: © 1991-2018 Unicode, Inc. All rights reserved.
 License:   ICU58p
 
@@ -65,7 +65,7 @@ License:   Apache-2.0
 
 Files:     third_party/toolchains/preconfig/*
 Copyright: 2019 The Bazel Authors
-	   2018 The TensorFlow Authors
+           2018 The TensorFlow Authors
 License:   Apache-2.0
 
 Files:     debian/*
