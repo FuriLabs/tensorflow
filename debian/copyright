@@ -54,8 +54,7 @@ Copyright: 2014-2015, Benoit Steiner <benoit.steiner.goog@gmail.com>
            2016 Nishant Patil <nishantpatil@google.com>
 License:   MPL-2.0
 
-Files:     third_party/icu/data/LICENSE
-           third_party/icu/data/*
+Files: third_party/icu/data/*
 Copyright: © 1991-2018 Unicode, Inc. All rights reserved.
 License:   ICU58p
 
