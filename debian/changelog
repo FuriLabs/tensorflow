@@ -11,6 +11,7 @@ tensorflow (2.15.0-1) UNRELEASED; urgency=medium
   Update renamed lintian tag names in lintian overrides.
   Set upstream metadata fields: Repository, Security-Contact.
   Remove listed license files (third_party/icu/data/LICENSE) from copyright.
+  Remove unused license definitions for BSD-3-Clause, LGPL-2.1+.
 
  -- Andreas Tille <tille@debian.org>  Wed, 24 Jan 2024 09:04:10 +0100
 
