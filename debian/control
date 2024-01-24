@@ -15,8 +15,8 @@ Build-Depends: debhelper-compat (= 13),
                libfarmhash-dev,
                libgemmlowp-dev,
                libgif-dev,
-               libgrpc++-dev (>= 1.23~),
-               libgrpc-dev (>= 1.23~),
+               libgrpc++-dev,
+               libgrpc-dev,
                libgtest-dev,
                libhighwayhash-dev,
                libhwloc-dev,
@@ -27,16 +27,16 @@ Build-Depends: debhelper-compat (= 13),
                libdnnl-dev [amd64 arm64 ppc64el s390x],
                libnsync-dev,
                libpng-dev,
-               libprotobuf-dev (>= 3.8~),
-               libprotoc-dev (>= 3.8~),
+               libprotobuf-dev,
+               libprotoc-dev,
                libre2-dev,
                libsnappy-dev,
                libsqlite3-dev,
                libssl-dev,
                libsuperlu-dev,
                bazel-bootstrap,
-               protobuf-compiler (>= 3.8.0~),
-               protobuf-compiler-grpc (>= 1.23~),
+               protobuf-compiler,
+               protobuf-compiler-grpc,
                python3,
                python3-all-dev,
                python3-future,
@@ -109,14 +109,13 @@ Description: Computation using data flow graphs for scalable machine learning
 # .
 # This package ships shared object libtensorflow.so.2.0, which exports
 # C API for TensorFlow (i.e. symbols named "*TF_*" or "*TFE_*").
-
 Package: libtensorflow-cc2
 Architecture: any
 Multi-Arch: same
 Section: libs
 Depends: ${misc:Depends},
          ${shlibs:Depends},
-         libtensorflow-framework2 (= ${binary:Version}),
+         libtensorflow-framework2 (= ${binary:Version})
 #libtensorflow2 (= ${binary:Version})
 Description: Computation using data flow graphs for scalable machine learning (C++)
  TensorFlow is an open source software library for numerical computation

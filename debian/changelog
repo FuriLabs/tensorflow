@@ -2,6 +2,7 @@ tensorflow (2.15.0-1) UNRELEASED; urgency=medium
 
   * New upstream version
   * Standards-Version: 4.6.2 (routine-update)
+  * Remove trailing whitespace in debian/copyright (routine-update)
 
  -- Andreas Tille <tille@debian.org>  Wed, 24 Jan 2024 09:04:10 +0100
 
