@@ -7,12 +7,13 @@ tensorflow (2.15.0-1) UNRELEASED; urgency=medium
   * Add salsa-ci file (routine-update)
   * Rules-Requires-Root: no (routine-update)
   * No tab in license text (routine-update)
-  Update lintian override info format in d/source/lintian-overrides on line 1-4.
-  Update renamed lintian tag names in lintian overrides.
-  Set upstream metadata fields: Repository, Security-Contact.
-  Remove listed license files (third_party/icu/data/LICENSE) from copyright.
-  Remove unused license definitions for BSD-3-Clause, LGPL-2.1+.
-  Remove obsolete field Name from debian/upstream/metadata (already present in machine-readable debian/copyright).
+  * Update lintian override info format in d/source/lintian-overrides line 1-4.
+  * Update renamed lintian tag names in lintian overrides.
+  * Set upstream metadata fields: Repository, Security-Contact.
+  * Remove listed license files (third_party/icu/data/LICENSE) from copyright.
+  * Remove unused license definitions for BSD-3-Clause, LGPL-2.1+.
+  * Remove obsolete field Name from debian/upstream/metadata (already present in
+    machine-readable debian/copyright).
 
  -- Andreas Tille <tille@debian.org>  Wed, 24 Jan 2024 09:04:10 +0100
 
