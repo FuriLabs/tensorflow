@@ -17,6 +17,9 @@ tensorflow (2.15.0-1) UNRELEASED; urgency=medium
   * Seems current bazel in Debian does not support option
      --experimental_link_static_libraries_once thus ignoring it for the moment
   * Builds-Depends: s/libcurl4-nss-dev/libcurl4-gnutls-dev | libcurl-ssl-dev/
+  * Do not Build-Depends_ python3-keras since it is not installable since
+    theano was removed.  Seemse to be circular dependency since
+    python3-tensorflow is needed in keras
 
  -- Andreas Tille <tille@debian.org>  Wed, 24 Jan 2024 09:04:10 +0100
 

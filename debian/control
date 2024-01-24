@@ -40,7 +40,7 @@ Build-Depends: debhelper-compat (= 13),
                python3,
                python3-all-dev,
                python3-future,
-               python3-keras,
+#               python3-keras,  # not installable since theano was removed.  Seemse to be circular dependency since python3-tensorflow is needed in keras
                python3-keras-applications,
                python3-keras-preprocessing,
                python3-mock,
