@@ -18,13 +18,10 @@ limitations under the License.
 #include <memory>
 
 #include "tensorflow/core/framework/op_kernel.h"
+#include "tensorflow/core/tpu/kernels/tpu_compile_op_common.h"
 
 namespace tensorflow {
-
 namespace tpu {
-// Forward declaration.
-class TpuCompileOpKernelImpl;
-}  // namespace tpu
 
 // The TPUCompile operator compiles a Tensorflow function into a
 // TPU executable to be run by TPUExecute.
@@ -32,14 +29,16 @@ class TpuCompileOpKernelImpl;
 class TpuCompileOp : public OpKernel {
  public:
   explicit TpuCompileOp(OpKernelConstruction* ctx);
+
+  TpuCompileOp(const TpuCompileOp&) = delete;
+  TpuCompileOp& operator=(const TpuCompileOp&) = delete;
+
   ~TpuCompileOp() override = default;
 
   void Compute(OpKernelContext* ctx) override;
 
  private:
-  std::unique_ptr<tpu::TpuCompileOpKernelImpl> impl_;
-
-  DISALLOW_COPY_AND_ASSIGN(TpuCompileOp);
+  std::unique_ptr<TpuCompileOpKernelCommon> impl_;
 };
 
 // The TPUCompile operator compiles a MLIR module into a
@@ -48,28 +47,33 @@ class TpuCompileOp : public OpKernel {
 class TpuCompileMlirOp : public OpKernel {
  public:
   explicit TpuCompileMlirOp(OpKernelConstruction* ctx);
+
+  TpuCompileMlirOp(const TpuCompileMlirOp&) = delete;
+  TpuCompileMlirOp& operator=(const TpuCompileMlirOp&) = delete;
+
   ~TpuCompileMlirOp() override = default;
 
   void Compute(OpKernelContext* ctx) override;
 
  private:
-  std::unique_ptr<tpu::TpuCompileOpKernelImpl> impl_;
-
-  DISALLOW_COPY_AND_ASSIGN(TpuCompileMlirOp);
+  std::unique_ptr<TpuCompileOpKernelCommon> impl_;
 };
 
 class TpuCompileSucceededAssertOp : public OpKernel {
  public:
   explicit TpuCompileSucceededAssertOp(OpKernelConstruction* ctx)
       : OpKernel(ctx) {}
+
+  TpuCompileSucceededAssertOp(const TpuCompileSucceededAssertOp&) = delete;
+  TpuCompileSucceededAssertOp& operator=(const TpuCompileSucceededAssertOp&) =
+      delete;
+
   ~TpuCompileSucceededAssertOp() override = default;
 
   void Compute(OpKernelContext* ctx) override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TpuCompileSucceededAssertOp);
 };
 
+}  // namespace tpu
 }  // namespace tensorflow
 
 #endif  // TENSORFLOW_CORE_TPU_KERNELS_TPU_COMPILE_OP_H_

@@ -15,7 +15,11 @@ limitations under the License.
 
 #include "tensorflow/lite/delegates/gpu/gl/kernels/elementwise.h"
 
+#include <any>
+#include <memory>
 #include <string>
+#include <utility>
+#include <variant>
 
 #include "absl/memory/memory.h"
 #include "absl/strings/substitute.h"
@@ -41,8 +45,31 @@ class ElementwiseOneArgument : public NodeShader {
       case OperationType::COS:
         source = "value_0 = cos(value_0);";
         break;
+      case OperationType::COPY:
+        source = "value_0 = value_0;";
+        break;
+      case OperationType::ELU:
+        source = R"(
+            value_0.x = value_0.x < 0.0 ? exp(value_0.x) - 1.0 : value_0.x;
+            value_0.y = value_0.y < 0.0 ? exp(value_0.y) - 1.0 : value_0.y;
+            value_0.z = value_0.z < 0.0 ? exp(value_0.z) - 1.0 : value_0.z;
+            value_0.w = value_0.w < 0.0 ? exp(value_0.w) - 1.0 : value_0.w;
+        )";
+        break;
       case OperationType::EXP:
         source = "value_0 = exp(value_0);";
+        break;
+      case tflite::gpu::OperationType::FLOOR:
+        source = "value_0 = floor(value_0);";
+        break;
+      case tflite::gpu::OperationType::GELU:
+        // Matches the approximate implementation of the cpu reference op.
+        // There's no gpu implementation of erfc so we can't match the accurate
+        // version.
+        // gelu(x) = 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
+        source =
+            "value_0 = 0.5 * value_0 * (1.0 + tanh(0.7978845608 * (value_0 + "
+            "0.044715 * value_0 * value_0 * value_0)));";
         break;
       case OperationType::HARD_SWISH:
         source =
@@ -57,6 +84,9 @@ class ElementwiseOneArgument : public NodeShader {
             value_0.z = value_0.z > 0.0 ? log(value_0.z) : nan;
             value_0.w = value_0.w > 0.0 ? log(value_0.w) : nan;
         )";
+        break;
+      case OperationType::NEG:
+        source = "value_0 = -(value_0);";
         break;
       case OperationType::RSQRT:
         source = R"(
@@ -138,10 +168,10 @@ class ElementwiseTwoArguments : public NodeShader {
       argument1 = "$input_data_1[0, 0, gid.z]$";
     } else {  // Scalar of const vector case
       const auto& attr =
-          absl::any_cast<const ElementwiseAttributes&>(ctx.op_attr);
+          std::any_cast<const ElementwiseAttributes&>(ctx.op_attr);
       const auto* tensor =
-          absl::get_if<Tensor<Linear, DataType::FLOAT32>>(&attr.param);
-      const auto* scalar = absl::get_if<float>(&attr.param);
+          std::get_if<Tensor<Linear, DataType::FLOAT32>>(&attr.param);
+      const auto* scalar = std::get_if<float>(&attr.param);
       if (!tensor && !scalar) {
         return absl::InvalidArgumentError(
             "Couldn't read scalar of const vector data from the attributes.");
@@ -163,6 +193,12 @@ class ElementwiseTwoArguments : public NodeShader {
         source = "value_0 = $0/$1;";
         break;
       }
+      case tflite::gpu::OperationType::FLOOR_DIV:
+        source = "value_0 = floor($0 / $1);";
+        break;
+      case tflite::gpu::OperationType::FLOOR_MOD:
+        source = "value_0 = $0 - floor($0 / $1) * $1;";
+        break;
       case OperationType::MAXIMUM: {
         source = "value_0 = max($0, $1);";
         break;
@@ -212,23 +248,30 @@ std::unique_ptr<NodeShader> NewElementwiseNodeShader(
   switch (operation_type) {
     case OperationType::ABS:
     case OperationType::COS:
+    case OperationType::COPY:
+    case OperationType::ELU:
     case OperationType::EXP:
-    case OperationType::LOG:
+    case OperationType::FLOOR:
+    case OperationType::GELU:
     case OperationType::HARD_SWISH:
+    case OperationType::LOG:
+    case OperationType::NEG:
     case OperationType::RSQRT:
     case OperationType::SIGMOID:
     case OperationType::SIN:
     case OperationType::SQRT:
     case OperationType::SQUARE:
     case OperationType::TANH:
-      return absl::make_unique<ElementwiseOneArgument>(operation_type);
+      return std::make_unique<ElementwiseOneArgument>(operation_type);
     case OperationType::DIV:
+    case OperationType::FLOOR_DIV:
+    case OperationType::FLOOR_MOD:
     case OperationType::MAXIMUM:
     case OperationType::MINIMUM:
     case OperationType::POW:
     case OperationType::SQUARED_DIFF:
     case OperationType::SUB:
-      return absl::make_unique<ElementwiseTwoArguments>(operation_type);
+      return std::make_unique<ElementwiseTwoArguments>(operation_type);
     default:
       return nullptr;
   }

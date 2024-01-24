@@ -20,15 +20,18 @@ limitations under the License.
 
 #include "tensorflow/core/profiler/protobuf/kernel_stats.pb.h"
 #include "tensorflow/core/profiler/protobuf/xplane.pb.h"
+#include "tensorflow/core/profiler/utils/gpu_event_stats.h"
+#include "tensorflow/core/profiler/utils/kernel_stats_utils.h"
 #include "tensorflow/core/profiler/utils/xplane_visitor.h"
 
 namespace tensorflow {
 namespace profiler {
 
-KernelStatsDb ConvertDeviceTraceXPlaneToKernelStatsDb(
+void ConvertDeviceTraceXPlaneToKernelReports(
     const XPlane& device_trace,
-    const std::function<void(const XEventVisitor&, KernelReport*)>&
-        on_kernel_fn);
+    const std::function<void(const GpuEventStats&, KernelReport*)>&
+        on_kernel_fn,
+    KernelReportMap* reports);
 
 }  // namespace profiler
 }  // namespace tensorflow

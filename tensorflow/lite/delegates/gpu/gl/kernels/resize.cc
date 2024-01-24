@@ -16,9 +16,12 @@ limitations under the License.
 #include "tensorflow/lite/delegates/gpu/gl/kernels/resize.h"
 
 #include <algorithm>
+#include <any>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/memory/memory.h"
@@ -35,11 +38,12 @@ class Resize : public NodeShader {
  public:
   absl::Status GenerateCode(const GenerationContext& ctx,
                             GeneratedCode* generated_code) const final {
-    const auto& attr = absl::any_cast<const Resize2DAttributes&>(ctx.op_attr);
+    const auto& attr = std::any_cast<const Resize2DAttributes&>(ctx.op_attr);
 
     if (ctx.input_shapes[0][2] > ctx.output_shapes[0][2] ||
         ctx.input_shapes[0][1] > ctx.output_shapes[0][1]) {
-      return absl::InvalidArgumentError("Output size is less than input size.");
+      return absl::UnimplementedError(
+          "Downsampling is currently not supported by the resize op on GPU.");
     }
     if (ctx.output_shapes[0][2] != attr.new_shape.w ||
         ctx.output_shapes[0][1] != attr.new_shape.h) {
@@ -97,8 +101,27 @@ class Resize : public NodeShader {
 
       value_0 = mix(mix(tex11, tex21, t.x), mix(tex12, tex22, t.x), t.y);)";
     } else if (attr.type == SamplingType::NEAREST) {
-      source = R"(
-      ivec2 coord = ivec2(vec2(gid.xy) * $scale_factor$);
+      std::string fxc;
+      std::string fyc;
+      if (attr.half_pixel_centers) {
+        fxc = "(float(gid.x) + 0.5) * $scale_factor.x$";
+        fyc = "(float(gid.y) + 0.5) * $scale_factor.y$";
+      } else {
+        fxc = "float(gid.x) * $scale_factor.x$";
+        fyc = "float(gid.y) * $scale_factor.y$";
+      }
+      if (attr.align_corners) {
+        fxc += " + 0.5";
+        fyc += " + 0.5";
+      }
+      source += "  ivec2 coord;\n";
+      source += "  coord.x = int(" + fxc + ");\n";
+      source += "  coord.y = int(" + fyc + ");\n";
+      source += "  coord.x = max(0, coord.x);\n";
+      source += "  coord.y = max(0, coord.y);\n";
+      source += "  coord.x = min(coord.x, $input_data_0_w$ - 1);\n";
+      source += "  coord.y = min(coord.y, $input_data_0_h$ - 1);\n";
+      source += R"(
       value_0 = $input_data_0[coord.x, coord.y, gid.z]$;
       )";
     } else {
@@ -121,7 +144,7 @@ class Resize : public NodeShader {
 }  // namespace
 
 std::unique_ptr<NodeShader> NewResizeNodeShader() {
-  return absl::make_unique<Resize>();
+  return std::make_unique<Resize>();
 }
 
 }  // namespace gl

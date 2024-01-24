@@ -41,6 +41,7 @@ namespace grappler {
 
 constexpr char kConstOp[] = "Const";
 constexpr char kCaseOp[] = "Case";
+constexpr char kStatelessCaseOp[] = "StatelessCase";
 constexpr char kDeviceIndexOp[] = "DeviceIndex";
 
 // TODO(b/157615690): clean up function implementation swap code.
@@ -130,7 +131,7 @@ string FindForwardNode(utils::MutableNodeView* backward_node) {
 void UpdateForwardIdentityNodeDtype(utils::MutableNodeView* forward_node,
                                     const DataTypeVector& dtypes) {
   const auto& fanouts_vector = forward_node->GetRegularFanouts();
-  for (int pos = 0; pos < fanouts_vector.size(); ++pos) {
+  for (int pos = 0, pos_limit = fanouts_vector.size(); pos < pos_limit; ++pos) {
     const auto& fanouts_at_pos = fanouts_vector[pos];
     for (const auto& fanout : fanouts_at_pos) {
       if ("Identity" == fanout.node_view()->GetOp()) {
@@ -225,13 +226,13 @@ Status UpdateNodeDef(utils::MutableNodeView* node_view, const string& funcName,
   }
 
   VLOG(3) << "Node def after swap is: " << node_def->DebugString();
-  return Status::OK();
+  return OkStatus();
 }
 
 Status ImplementationSelector::LoadFunctions(const GraphDef& graph) {
-  lib_info_ = absl::make_unique<FunctionLibraryApiInfo>();
+  lib_info_ = std::make_unique<FunctionLibraryApiInfo>();
   TF_RETURN_IF_ERROR(lib_info_->Init(graph.library()));
-  return Status::OK();
+  return OkStatus();
 }
 
 Status ImplementationSelector::MaybeOptimizeFunctionCall(
@@ -256,7 +257,7 @@ Status ImplementationSelector::MaybeOptimizeFunctionCall(
   if (function_attribute_names.empty() &&
       lib_info_->GetApiInfo(node_def->op()) == nullptr) {
     // A regular op, or a function which has no interface.
-    return Status::OK();
+    return OkStatus();
   }
 
   DeviceNameUtils::ParsedName parsed_name;
@@ -297,7 +298,7 @@ Status ImplementationSelector::MaybeOptimizeFunctionCall(
       }
     }
   }
-  return Status::OK();
+  return OkStatus();
 }
 
 // Finds the index of the device from the device name list.
@@ -318,7 +319,7 @@ Status FindDeviceIndex(const utils::MutableNodeView* device_index_node,
     // be the final item in the case op branching list.
     *index = device_list.size();
   }
-  return Status::OK();
+  return OkStatus();
 }
 
 // Rewrites the device_index op to a const op with value of the index.
@@ -327,7 +328,7 @@ void RewriteDeviceIndexOp(utils::MutableNodeView* device_index_node,
   // Modifies the DeviceIndex node to be an Const op with correct device index.
   auto node = device_index_node->node();
   node->set_op(kConstOp);
-  node->clear_attr();
+  EraseRegularNodeAttributes(node);
   (*node->mutable_attr())["dtype"].set_type(DT_INT32);
   auto* tensor = (*node->mutable_attr())["value"].mutable_tensor();
   tensor->set_dtype(DT_INT32);
@@ -353,7 +354,9 @@ Status ImplementationSelector::SelectDeviceIndex(GraphDef* graph) const {
     // case node.
     for (const auto& fanouts : node_view->GetRegularFanouts()) {
       for (const auto& fanout : fanouts) {
-        if (fanout.node_view()->GetOp() != kCaseOp) continue;
+        if (fanout.node_view()->GetOp() != kCaseOp &&
+            fanout.node_view()->GetOp() != kStatelessCaseOp)
+          continue;
         int index;
         // If any error is thrown out during device parsing, we simply skip
         // and do not modify the DeviceIndexNode.
@@ -365,17 +368,17 @@ Status ImplementationSelector::SelectDeviceIndex(GraphDef* graph) const {
       }
     }
   }
-  return Status::OK();
+  return OkStatus();
 }
 
 Status ImplementationSelector::SelectImplementation(GraphDef* graph) const {
   if (!graph->has_library()) {
     VLOG(2) << "Skipping graph since it does not have function def";
-    return Status::OK();
+    return OkStatus();
   }
   if (lib_info_->empty()) {
     VLOG(2) << "Skipping optimization since lib_info is empty";
-    return Status::OK();
+    return OkStatus();
   }
 
   Status status;
@@ -387,7 +390,7 @@ Status ImplementationSelector::SelectImplementation(GraphDef* graph) const {
     TF_RETURN_IF_ERROR(MaybeOptimizeFunctionCall(graph_view.GetNode(k)));
   }
 
-  return Status::OK();
+  return OkStatus();
 }
 
 Status ImplementationSelector::Optimize(Cluster* cluster,

@@ -18,10 +18,12 @@ limitations under the License.
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <vector>
 
-#include "tensorflow/lite/c/builtin_op_data.h"
-#include "tensorflow/lite/c/common.h"
+#include "tensorflow/lite/core/c/builtin_op_data.h"
+#include "tensorflow/lite/core/c/c_api_types.h"
+#include "tensorflow/lite/core/c/common.h"
 #include "tensorflow/lite/kernels/cpu_backend_context.h"
 #include "tensorflow/lite/kernels/internal/compatibility.h"
 #include "tensorflow/lite/kernels/internal/optimized/cpu_check.h"
@@ -98,21 +100,25 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
       reinterpret_cast<TfLiteDepthwiseConvParams*>(node->builtin_data);
   OpData* data = reinterpret_cast<OpData*>(node->user_data);
 
-  // TODO(ahentz): use could use GetOptionalInputTensor() here, but we need to
-  // decide whether we are OK with optional tensors being completely absent, as
-  // opposed to having -1 as their index.
-  bool hasBias = NumInputs(node) == 3;
+  bool has_bias = NumInputs(node) == 3;
 
-  TF_LITE_ENSURE(context, hasBias || NumInputs(node) == 2);
-  const TfLiteTensor* input = GetInput(context, node, kInputTensor);
-  const TfLiteTensor* filter = GetInput(context, node, kFilterTensor);
+  TF_LITE_ENSURE(context, has_bias || NumInputs(node) == 2);
+  const TfLiteTensor* input;
+  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, kInputTensor, &input));
+  const TfLiteTensor* filter;
+  TF_LITE_ENSURE_OK(context,
+                    GetInputSafe(context, node, kFilterTensor, &filter));
   const TfLiteTensor* bias = nullptr;
 
   TF_LITE_ENSURE_EQ(context, NumOutputs(node), 1);
-  TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
+  TfLiteTensor* output;
+  TF_LITE_ENSURE_OK(context,
+                    GetOutputSafe(context, node, kOutputTensor, &output));
 
   TF_LITE_ENSURE_EQ(context, NumDimensions(input), 4);
   TF_LITE_ENSURE_EQ(context, NumDimensions(filter), 4);
+  TF_LITE_ENSURE(context, params->dilation_height_factor > 0);
+  TF_LITE_ENSURE(context, params->dilation_width_factor > 0);
 
   const TfLiteType data_type = input->type;
 
@@ -124,23 +130,27 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
                      data_type == kTfLiteInt8 || data_type == kTfLiteInt16);
   TF_LITE_ENSURE_TYPES_EQ(context, output->type, data_type);
   if (!is_hybrid) {
-    TF_LITE_ENSURE(context,
-                   filter->type == data_type || data_type == kTfLiteInt16);
+    TF_LITE_ENSURE(context, filter->type == data_type ||
+                                data_type == kTfLiteInt16 ||
+                                filter->type == kTfLiteInt4);
+  }
+
+  if (data_type == kTfLiteInt16) {
+    TF_LITE_ENSURE_EQ(context, input->params.zero_point, 0);
+    TF_LITE_ENSURE_EQ(context, output->params.zero_point, 0);
   }
 
   // Filter in DepthwiseConv is expected to be [1, H, W, O].
   TF_LITE_ENSURE_EQ(context, SizeOfDimension(filter, 0), 1);
 
-  if (hasBias) {
-    bias = GetInput(context, node, kBiasTensor);
+  if (has_bias) {
+    TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, kBiasTensor, &bias));
     if (data_type == kTfLiteUInt8 || data_type == kTfLiteInt8) {
       TF_LITE_ENSURE_TYPES_EQ(context, bias->type, kTfLiteInt32);
       TF_LITE_ENSURE_EQ(context, bias->params.zero_point, 0);
     } else if (data_type == kTfLiteInt16) {
       TF_LITE_ENSURE_TYPES_EQ(context, bias->type, kTfLiteInt64);
       TF_LITE_ENSURE_EQ(context, bias->params.zero_point, 0);
-      TF_LITE_ENSURE_EQ(context, input->params.zero_point, 0);
-      TF_LITE_ENSURE_EQ(context, output->params.zero_point, 0);
     } else {
       TF_LITE_ENSURE_TYPES_EQ(context, bias->type, data_type);
     }
@@ -171,6 +181,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   if (data_type != kTfLiteFloat32) {
     TF_LITE_ENSURE_EQ(context, filter->quantization.type,
                       kTfLiteAffineQuantization);
+    TF_LITE_ENSURE(context, filter->quantization.type != kTfLiteNoQuantization);
     const auto* affine_quantization =
         reinterpret_cast<TfLiteAffineQuantization*>(
             filter->quantization.params);
@@ -190,6 +201,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   }
 
   if (is_hybrid) {
+    TF_LITE_ENSURE(context, filter->quantization.type != kTfLiteNoQuantization);
     const auto* affine_quantization =
         reinterpret_cast<TfLiteAffineQuantization*>(
             filter->quantization.params);
@@ -224,8 +236,10 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
 
     node->temporaries->data[data->input_quantized_index] =
         data->input_quantized_id;
-    TfLiteTensor* input_quantized =
-        GetTemporary(context, node, data->input_quantized_index);
+    TfLiteTensor* input_quantized;
+    TF_LITE_ENSURE_OK(
+        context, GetTemporarySafe(context, node, data->input_quantized_index,
+                                  &input_quantized));
     input_quantized->type = kTfLiteInt8;
     input_quantized->allocation_type = kTfLiteArenaRw;
     if (!TfLiteIntArrayEqual(input_quantized->dims, input->dims)) {
@@ -235,8 +249,10 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     }
     node->temporaries->data[data->scaling_factors_index] =
         data->scaling_factors_id;
-    TfLiteTensor* scaling_factors =
-        GetTemporary(context, node, data->scaling_factors_index);
+    TfLiteTensor* scaling_factors;
+    TF_LITE_ENSURE_OK(
+        context, GetTemporarySafe(context, node, data->scaling_factors_index,
+                                  &scaling_factors));
     scaling_factors->type = kTfLiteFloat32;
     scaling_factors->allocation_type = kTfLiteArenaRw;
     const int batch_size = SizeOfDimension(input, 0);
@@ -248,8 +264,10 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
                                                        scaling_factors_size));
     }
     node->temporaries->data[data->input_offset_index] = data->input_offset_id;
-    TfLiteTensor* input_offsets =
-        GetTemporary(context, node, data->input_offset_index);
+    TfLiteTensor* input_offsets;
+    TF_LITE_ENSURE_OK(context,
+                      GetTemporarySafe(context, node, data->input_offset_index,
+                                       &input_offsets));
     input_offsets->type = kTfLiteInt32;
     input_offsets->allocation_type = kTfLiteArenaRw;
     if (!TfLiteIntArrayEqualsArray(input_offsets->dims, 1, scaling_dims)) {
@@ -274,8 +292,8 @@ TfLiteStatus ComputeDepthMultiplier(TfLiteContext* context,
                                     int16* depth_multiplier) {
   int num_filter_channels = SizeOfDimension(filter, 3);
   int num_input_channels = SizeOfDimension(input, 3);
+  TF_LITE_ENSURE(context, num_input_channels != 0);
   TF_LITE_ENSURE_EQ(context, num_filter_channels % num_input_channels, 0);
-
   *depth_multiplier = num_filter_channels / num_input_channels;
   return kTfLiteOk;
 }
@@ -385,23 +403,65 @@ TfLiteStatus EvalQuantizedPerChannel(TfLiteContext* context, TfLiteNode* node,
   TF_LITE_ENSURE_STATUS(ComputeDepthMultiplier(context, input, filter,
                                                &op_params.depth_multiplier));
 
-  if (kernel_type == kReference) {
-    reference_integer_ops::DepthwiseConvPerChannel(
-        op_params, data->per_channel_output_multiplier.data(),
-        data->per_channel_output_shift.data(), GetTensorShape(input),
-        GetTensorData<int8>(input), GetTensorShape(filter),
-        GetTensorData<int8>(filter), GetTensorShape(bias),
-        GetTensorData<int32>(bias), GetTensorShape(output),
-        GetTensorData<int8>(output));
+  KernelType effective_kernel_type = kernel_type;
+
+  const int8_t* filter_data;
+  const size_t bytes_unpacked = filter->bytes * 2;
+  auto unpacked_filter_data = std::make_unique<int8_t[]>(bytes_unpacked);
+
+  if (filter->type == kTfLiteInt4) {
+    tflite::tensor_utils::UnpackDenseInt4IntoInt8(
+        GetTensorData<int8_t>(filter), GetTensorShape(filter).FlatSize(),
+        unpacked_filter_data.get());
+    filter_data = unpacked_filter_data.get();
   } else {
-    optimized_integer_ops::DepthwiseConvPerChannel(
-        op_params, data->per_channel_output_multiplier.data(),
-        data->per_channel_output_shift.data(), GetTensorShape(input),
-        GetTensorData<int8>(input), GetTensorShape(filter),
-        GetTensorData<int8>(filter), GetTensorShape(bias),
-        GetTensorData<int32>(bias), GetTensorShape(output),
-        GetTensorData<int8>(output),
-        CpuBackendContext::GetFromContext(context));
+    filter_data = GetTensorData<int8>(filter);
+  }
+
+  switch (effective_kernel_type) {
+    case kReference: {
+      switch (filter->type) {
+        case kTfLiteInt4:
+        case kTfLiteInt8: {
+          reference_integer_ops::DepthwiseConvPerChannel(
+              op_params, data->per_channel_output_multiplier.data(),
+              data->per_channel_output_shift.data(), GetTensorShape(input),
+              GetTensorData<int8>(input), GetTensorShape(filter), filter_data,
+              GetTensorShape(bias), GetTensorData<int32>(bias),
+              GetTensorShape(output), GetTensorData<int8>(output));
+          break;
+        }
+        default: {
+          TF_LITE_KERNEL_LOG(context,
+                             "Weight type %s (%d) not supported for filter.",
+                             TfLiteTypeGetName(filter->type), filter->type);
+          break;
+        }
+      }
+      break;
+    }
+    case kGenericOptimized:
+    case kNeonOptimized: {
+      switch (filter->type) {
+        case kTfLiteInt4:
+        case kTfLiteInt8: {
+          optimized_integer_ops::DepthwiseConvPerChannel(
+              op_params, data->per_channel_output_multiplier.data(),
+              data->per_channel_output_shift.data(), GetTensorShape(input),
+              GetTensorData<int8>(input), GetTensorShape(filter), filter_data,
+              GetTensorShape(bias), GetTensorData<int32>(bias),
+              GetTensorShape(output), GetTensorData<int8>(output),
+              CpuBackendContext::GetFromContext(context));
+          break;
+        }
+        default: {
+          TF_LITE_KERNEL_LOG(context,
+                             "Weight type %s (%d) not supported for filter.",
+                             TfLiteTypeGetName(filter->type), filter->type);
+          break;
+        }
+      }
+    }
   }
   return kTfLiteOk;
 }
@@ -444,15 +504,24 @@ TfLiteStatus EvalHybridPerChannel(TfLiteContext* context, TfLiteNode* node,
   float output_activation_min, output_activation_max;
   CalculateActivationRange(params->activation, &output_activation_min,
                            &output_activation_max);
-  const int input_size = NumElements(input) / SizeOfDimension(input, 0);
   const int batch_size = SizeOfDimension(input, 0);
-  const TfLiteTensor* input_quantized =
-      GetTemporary(context, node, data->input_quantized_index);
+  TF_LITE_ENSURE(context, batch_size != 0);
+  const int input_size = NumElements(input) / batch_size;
+  TfLiteTensor* input_quantized;
+  TF_LITE_ENSURE_OK(context,
+                    GetTemporarySafe(context, node, data->input_quantized_index,
+                                     &input_quantized));
   int8_t* quantized_input_ptr_batch = input_quantized->data.int8;
-  float* scaling_factors_ptr = GetTensorData<float>(
-      GetTemporary(context, node, data->scaling_factors_index));
-  int32_t* input_offset_ptr = GetTensorData<int32_t>(
-      GetTemporary(context, node, data->input_offset_index));
+  TfLiteTensor* scaling_factors_tensor;
+  TF_LITE_ENSURE_OK(context,
+                    GetTemporarySafe(context, node, data->scaling_factors_index,
+                                     &scaling_factors_tensor));
+  float* scaling_factors_ptr = GetTensorData<float>(scaling_factors_tensor);
+  TfLiteTensor* input_offset_tensor;
+  TF_LITE_ENSURE_OK(context,
+                    GetTemporarySafe(context, node, data->input_offset_index,
+                                     &input_offset_tensor));
+  int32_t* input_offset_ptr = GetTensorData<int32_t>(input_offset_tensor);
 
   for (int b = 0; b < batch_size; ++b) {
     const int offset = b * input_size;
@@ -475,6 +544,7 @@ TfLiteStatus EvalHybridPerChannel(TfLiteContext* context, TfLiteNode* node,
   op_params.weights_offset = 0;
   op_params.float_activation_min = output_activation_min;
   op_params.float_activation_max = output_activation_max;
+  TF_LITE_ENSURE(context, filter->quantization.type != kTfLiteNoQuantization);
   const auto* affine_quantization =
       reinterpret_cast<TfLiteAffineQuantization*>(filter->quantization.params);
   if (kernel_type == kReference) {
@@ -504,9 +574,14 @@ TfLiteStatus EvalImpl(TfLiteContext* context, TfLiteNode* node) {
       reinterpret_cast<TfLiteDepthwiseConvParams*>(node->builtin_data);
   OpData* data = reinterpret_cast<OpData*>(node->user_data);
 
-  TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
-  const TfLiteTensor* input = GetInput(context, node, kInputTensor);
-  const TfLiteTensor* filter = GetInput(context, node, kFilterTensor);
+  TfLiteTensor* output;
+  TF_LITE_ENSURE_OK(context,
+                    GetOutputSafe(context, node, kOutputTensor, &output));
+  const TfLiteTensor* input;
+  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, kInputTensor, &input));
+  const TfLiteTensor* filter;
+  TF_LITE_ENSURE_OK(context,
+                    GetInputSafe(context, node, kFilterTensor, &filter));
   const TfLiteTensor* bias =
       (NumInputs(node) == 3) ? GetInput(context, node, kBiasTensor) : nullptr;
   TFLITE_DCHECK_EQ(input_type, input->type);
@@ -539,15 +614,16 @@ TfLiteStatus EvalImpl(TfLiteContext* context, TfLiteNode* node) {
                                          output);
       break;
     default:
-      context->ReportError(context, "Type %d not currently supported.",
-                           input->type);
+      TF_LITE_KERNEL_LOG(context, "Type %d not currently supported.",
+                         input->type);
       return kTfLiteError;
   }
 }
 
 template <KernelType kernel_type>
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
-  const TfLiteTensor* input = GetInput(context, node, kInputTensor);
+  const TfLiteTensor* input;
+  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, kInputTensor, &input));
 
   switch (input->type) {  // Already know in/out types are same.
     case kTfLiteFloat32:
@@ -559,8 +635,8 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
     case kTfLiteInt16:
       return EvalImpl<kernel_type, kTfLiteInt16>(context, node);
     default:
-      context->ReportError(context, "Type %d not currently supported.",
-                           input->type);
+      TF_LITE_KERNEL_LOG(context, "Type %d not currently supported.",
+                         input->type);
       return kTfLiteError;
   }
 }

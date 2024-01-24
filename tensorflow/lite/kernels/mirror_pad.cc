@@ -21,8 +21,8 @@ limitations under the License.
 #include <vector>
 
 #include "ruy/profiler/instrumentation.h"  // from @ruy
-#include "tensorflow/lite/c/builtin_op_data.h"
-#include "tensorflow/lite/c/common.h"
+#include "tensorflow/lite/core/c/builtin_op_data.h"
+#include "tensorflow/lite/core/c/common.h"
 #include "tensorflow/lite/kernels/cpu_backend_context.h"
 #include "tensorflow/lite/kernels/cpu_backend_threadpool.h"
 #include "tensorflow/lite/kernels/internal/optimized/optimized_ops.h"
@@ -162,8 +162,10 @@ struct MirrorPadWorkerTask : cpu_backend_threadpool::Task {
 
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   ruy::profiler::ScopeLabel label("MirrorPad");
-  const TfLiteTensor* input_tensor = GetInput(context, node, 0);
-  const TfLiteTensor* padding_matrix = GetInput(context, node, 1);
+  const TfLiteTensor* input_tensor;
+  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, 0, &input_tensor));
+  const TfLiteTensor* padding_matrix;
+  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, 1, &padding_matrix));
   auto* params =
       reinterpret_cast<TfLiteMirrorPaddingParams*>(node->builtin_data);
 
@@ -172,7 +174,8 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   }
   const int input_dims = NumDimensions(input_tensor);
 
-  TfLiteTensor* output_tensor = GetOutput(context, node, 0);
+  TfLiteTensor* output_tensor;
+  TF_LITE_ENSURE_OK(context, GetOutputSafe(context, node, 0, &output_tensor));
   if (IsDynamicTensor(output_tensor)) {
     auto output_size = GetPaddedOutputShape(input_tensor, padding_matrix);
     if (output_size == nullptr) {
@@ -243,6 +246,10 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       TF_LITE_MIRROR_PAD(int64_t);
       break;
     }
+    case kTfLiteInt16: {
+      TF_LITE_MIRROR_PAD(int16_t);
+      break;
+    }
     default:
       status = kTfLiteError;
       break;
@@ -258,15 +265,31 @@ void* Init(TfLiteContext* context, const char* buffer, size_t length) {
 void Free(TfLiteContext* context, void* buffer) {}
 
 TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
-  const TfLiteTensor* input_tensor = GetInput(context, node, 0);
-  const TfLiteTensor* padding_matrix = GetInput(context, node, 1);
-  TfLiteTensor* output_tensor = GetOutput(context, node, 0);
+  const TfLiteTensor* input_tensor;
+  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, 0, &input_tensor));
+  const TfLiteTensor* padding_matrix;
+  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, 1, &padding_matrix));
+  TfLiteTensor* output_tensor;
+  TF_LITE_ENSURE_OK(context, GetOutputSafe(context, node, 0, &output_tensor));
 
   TF_LITE_ENSURE_EQ(context, NumDimensions(padding_matrix), 2);
   TF_LITE_ENSURE_EQ(context, SizeOfDimension(padding_matrix, 0),
                     NumDimensions(input_tensor));
 
-  if (!IsConstantTensor(padding_matrix)) {
+  if (input_tensor->type == kTfLiteUInt8 || input_tensor->type == kTfLiteInt8 ||
+      input_tensor->type == kTfLiteInt16) {
+    TF_LITE_ENSURE_EQ(context, input_tensor->params.scale,
+                      output_tensor->params.scale);
+    TF_LITE_ENSURE_EQ(context, input_tensor->params.zero_point,
+                      output_tensor->params.zero_point);
+  }
+
+  if (input_tensor->type == kTfLiteInt16) {
+    TF_LITE_ENSURE_EQ(context, input_tensor->params.zero_point, 0);
+    TF_LITE_ENSURE_EQ(context, output_tensor->params.zero_point, 0);
+  }
+
+  if (!IsConstantOrPersistentTensor(padding_matrix)) {
     SetTensorToDynamic(output_tensor);
     return kTfLiteOk;
   }

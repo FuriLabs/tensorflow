@@ -18,7 +18,7 @@ limitations under the License.
 #include <set>
 #include <string>
 
-#include "tensorflow/lite/model.h"
+#include "tensorflow/lite/core/model.h"
 
 namespace tflite {
 namespace flex {
@@ -42,7 +42,7 @@ struct OpKernelCompare {
 using OpKernelSet = std::set<OpKernel, OpKernelCompare>;
 
 // Find flex ops and its kernel classes inside a TFLite model and add them to
-// the map flex_ops. The map stores
+// the map flex_ops.
 void AddFlexOpsFromModel(const tflite::Model* model, OpKernelSet* flex_ops);
 
 // Serialize the list op of to a json string. If flex_ops is empty, return an

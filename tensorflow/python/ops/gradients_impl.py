@@ -14,17 +14,14 @@
 # ==============================================================================
 """Implements the graph generation for computation of gradients."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
+from tensorflow.compiler.jit.ops import xla_ops_grad  # pylint: disable=unused-import
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_grad  # pylint: disable=unused-import
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import check_ops  # pylint: disable=unused-import
 from tensorflow.python.ops import control_flow_grad  # pylint: disable=unused-import
-from tensorflow.python.ops import control_flow_ops
+from tensorflow.python.ops import cudnn_rnn_grad  # pylint: disable=unused-import
 from tensorflow.python.ops import gradients_util
 from tensorflow.python.ops import image_grad  # pylint: disable=unused-import
 from tensorflow.python.ops import linalg_grad  # pylint: disable=unused-import
@@ -33,10 +30,21 @@ from tensorflow.python.ops import logging_ops  # pylint: disable=unused-import
 from tensorflow.python.ops import manip_grad  # pylint: disable=unused-import
 from tensorflow.python.ops import math_grad  # pylint: disable=unused-import
 from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import nccl_ops  # pylint: disable=unused-import
 from tensorflow.python.ops import optional_grad  # pylint: disable=unused-import
+from tensorflow.python.ops import proto_ops  # pylint: disable=unused-import
 from tensorflow.python.ops import random_grad  # pylint: disable=unused-import
+from tensorflow.python.ops import rnn_grad  # pylint: disable=unused-import
+from tensorflow.python.ops import sdca_ops  # pylint: disable=unused-import
+from tensorflow.python.ops import sets  # pylint: disable=unused-import
+from tensorflow.python.ops import sparse_grad  # pylint: disable=unused-import
+from tensorflow.python.ops import tensor_array_grad  # pylint: disable=unused-import
 from tensorflow.python.ops import tensor_array_ops
+from tensorflow.python.ops import while_loop
+from tensorflow.python.ops.linalg.sparse import sparse_csr_matrix_grad  # pylint: disable=unused-import
+from tensorflow.python.ops.signal import fft_ops  # pylint: disable=unused-import
 from tensorflow.python.ops.unconnected_gradients import UnconnectedGradients
+from tensorflow.python.training import checkpoint_ops  # pylint: disable=unused-import
 from tensorflow.python.util.tf_export import tf_export
 
 
@@ -426,7 +434,7 @@ def hessians(ys,
     ]
     # Iterate over all elements of the gradient and compute second order
     # derivatives.
-    _, hessian = control_flow_ops.while_loop(
+    _, hessian = while_loop.while_loop(
         lambda j, _: j < n,
         lambda j, result: (j + 1,
                            result.write(j, gradients(gradient[j], x)[0])),
@@ -446,8 +454,34 @@ def HessiansV2(ys,
                gate_gradients=False,
                aggregation_method=None,
                name="hessians"):
-  return hessians(ys, xs, name=name, gate_gradients=gate_gradients,
-                  aggregation_method=aggregation_method)
+  """Constructs the Hessian of sum of `ys` with respect to `x` in `xs`.
 
+  `hessians()` adds ops to the graph to output the Hessian matrix of `ys`
+  with respect to `xs`.  It returns a list of `Tensor` of length `len(xs)`
+  where each tensor is the Hessian of `sum(ys)`.
 
-HessiansV2.__doc__ = hessians.__doc__
+  The Hessian is a matrix of second-order partial derivatives of a scalar
+  tensor (see https://en.wikipedia.org/wiki/Hessian_matrix for more details).
+
+  Args:
+    ys: A `Tensor` or list of tensors to be differentiated.
+    xs: A `Tensor` or list of tensors to be used for differentiation.
+    gate_gradients: See `gradients()` documentation for details.
+    aggregation_method: See `gradients()` documentation for details.
+    name: Optional name to use for grouping all the gradient ops together.
+      defaults to 'hessians'.
+
+  Returns:
+    A list of Hessian matrices of `sum(ys)` for each `x` in `xs`.
+
+  Raises:
+    LookupError: if one of the operations between `xs` and `ys` does not
+      have a registered gradient function.
+  """
+  return hessians(
+      ys,
+      xs,
+      name=name,
+      colocate_gradients_with_ops=True,
+      gate_gradients=gate_gradients,
+      aggregation_method=aggregation_method)

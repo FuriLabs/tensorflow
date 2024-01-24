@@ -1,9 +1,12 @@
+load("//tensorflow/core/platform:rules_cc.bzl", "cc_library")
+
 # Experimental posix filesystem plugin.
 load("//tensorflow:tensorflow.bzl", "tf_cc_shared_object")
 
 package(
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = ["//visibility:private"],
-    licenses = ["notice"],  # Apache 2.0
+    licenses = ["notice"],
 )
 
 # Filesystem implementation for POSIX environments: Linux, MacOS, Android, etc.

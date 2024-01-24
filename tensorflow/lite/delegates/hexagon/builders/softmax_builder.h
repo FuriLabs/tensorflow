@@ -34,12 +34,11 @@ class SoftmaxOpBuilder : public OpBuilder {
   TfLiteStatus RegisterOutputs(const TfLiteIntArray* outputs,
                                TfLiteContext* context) override;
 
-  ~SoftmaxOpBuilder();
+  ~SoftmaxOpBuilder() override;
 
  private:
   TensorID node_output_;
   float beta_value_ = 1.0f;
-  float input_min_, input_max_;
 };
 
 }  // namespace hexagon

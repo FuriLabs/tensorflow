@@ -1,12 +1,13 @@
 // RUN: flatbuffer_translate -mlir-to-tflite-flatbuffer %s -emit-select-tf-ops -o - | flatbuffer_to_string - | FileCheck %s
 
-func @main(tensor<4xf64>, tensor<4xf64>) -> tensor<4xf64> {
+func.func @main(tensor<4xf64>, tensor<4xf64>) -> tensor<4xf64> {
 ^bb0(%arg0: tensor<4xf64>, %arg1: tensor<4xf64>):
 // CHECK:  {
 // CHECK-NEXT:  version: 3,
 // CHECK-NEXT:  operator_codes: [ {
-// CHECK-NEXT:    builtin_code: CUSTOM,
-// CHECK-NEXT:    custom_code: "FlexAdd"
+// CHECK-NEXT:    deprecated_builtin_code: 32,
+// CHECK-NEXT:    custom_code: "FlexAdd",
+// CHECK-NEXT:    builtin_code: CUSTOM
 // CHECK-NEXT:  } ],
 // CHECK-NEXT:  subgraphs: [ {
 // CHECK-NEXT:    tensors: [ {
@@ -16,7 +17,8 @@ func @main(tensor<4xf64>, tensor<4xf64>) -> tensor<4xf64> {
 // CHECK-NEXT:      name: "arg0",
 // CHECK-NEXT:      quantization: {
 // CHECK-EMPTY:
-// CHECK-NEXT:      }
+// CHECK-NEXT:      },
+// CHECK-NEXT:      has_rank: true
 // CHECK-NEXT:    }, {
 // CHECK-NEXT:      shape: [ 4 ],
 // CHECK-NEXT:      type: FLOAT64,
@@ -24,7 +26,8 @@ func @main(tensor<4xf64>, tensor<4xf64>) -> tensor<4xf64> {
 // CHECK-NEXT:      name: "arg1",
 // CHECK-NEXT:      quantization: {
 // CHECK-EMPTY:
-// CHECK-NEXT:      }
+// CHECK-NEXT:      },
+// CHECK-NEXT:      has_rank: true
 // CHECK-NEXT:    }, {
 // CHECK-NEXT:      shape: [ 4 ],
 // CHECK-NEXT:      type: FLOAT64,
@@ -32,7 +35,8 @@ func @main(tensor<4xf64>, tensor<4xf64>) -> tensor<4xf64> {
 // CHECK-NEXT:      name: "add",
 // CHECK-NEXT:      quantization: {
 // CHECK-EMPTY:
-// CHECK-NEXT:      }
+// CHECK-NEXT:      },
+// CHECK-NEXT:      has_rank: true
 // CHECK-NEXT:    } ],
 // CHECK-NEXT:    inputs: [ 0, 1 ],
 // CHECK-NEXT:    outputs: [ 2 ],
@@ -59,8 +63,9 @@ func @main(tensor<4xf64>, tensor<4xf64>) -> tensor<4xf64> {
 // CHECK-NEXT:    name: "min_runtime_version",
 // CHECK-NEXT:    buffer: 4
 // CHECK-NEXT:  } ]
+// CHECK-NEXT:  signature_defs: [ ]
 // CHECK-NEXT:}
 
   %0 = "tf.Add"(%arg0, %arg1)  : (tensor<4xf64>, tensor<4xf64>) -> tensor<4xf64> loc("add")
-  return %0 : tensor<4xf64>
+  func.return %0 : tensor<4xf64>
 }

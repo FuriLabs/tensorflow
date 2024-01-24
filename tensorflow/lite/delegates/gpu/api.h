@@ -35,6 +35,7 @@ limitations under the License.
 
 #include <cstdint>
 #include <memory>
+#include <variant>
 #include <vector>
 
 #include "absl/types/span.h"
@@ -43,8 +44,13 @@ limitations under the License.
 #include "tensorflow/lite/delegates/gpu/common/data_type.h"
 #include "tensorflow/lite/delegates/gpu/common/status.h"
 #include "tensorflow/lite/delegates/gpu/common/util.h"
+#include "vulkan/vulkan.h"  // from @vulkan_headers
+
+#define GL_NO_PROTOTYPES
+#define EGL_NO_PROTOTYPES
 #include "tensorflow/lite/delegates/gpu/gl/portable_gl31.h"
-#include <vulkan/vulkan.h>
+#undef GL_NO_PROTOTYPES
+#undef EGL_NO_PROTOTYPES
 
 namespace tflite {
 namespace gpu {
@@ -224,8 +230,8 @@ bool IsValid(const TensorObjectDef& def);
 uint32_t NumElements(const TensorObjectDef& def);
 
 using TensorObject =
-    absl::variant<absl::monostate, OpenGlBuffer, OpenGlTexture, CpuMemory,
-                  OpenClBuffer, OpenClTexture, VulkanBuffer, VulkanTexture>;
+    std::variant<std::monostate, OpenGlBuffer, OpenGlTexture, CpuMemory,
+                 OpenClBuffer, OpenClTexture, VulkanBuffer, VulkanTexture>;
 
 // @return true if object is set and corresponding values are defined.
 bool IsValid(const TensorObjectDef& def, const TensorObject& object);
@@ -234,6 +240,10 @@ ObjectType GetType(const TensorObject& object);
 
 // @return true if corresponding object is set for the given type
 bool IsObjectPresent(ObjectType type, const TensorObject& obj);
+
+// @return true if corresponding object has already been initialized and
+// assigned with a specific ObjectType.
+bool IsObjectInitialized(const TensorObject& obj);
 
 class InferenceRunner;
 
@@ -317,6 +327,11 @@ enum class InferenceUsage {
   // Prefer maximizing the throughput. Same inference runner will be used
   // repeatedly on different inputs.
   SUSTAINED_SPEED,
+
+  // Balance init latency and throughput. This option will result in slightly
+  // higher init latency than FAST_SINGLE_ANSWER but should have inference
+  // latency closer to SUSTAINED_SPEED.
+  BALANCED,
 };
 
 // Defines aspects to control while instantiating a runner.
@@ -359,7 +374,7 @@ struct InferenceOptions {
 };
 
 // Returns a position number for the priority. If priority is missing,
-// then it it would return 'max num priorities + 1'.
+// then it would return 'max num priorities + 1'.
 int GetPosition(const InferenceOptions& options, InferencePriority p);
 
 // Return true if options are valid.

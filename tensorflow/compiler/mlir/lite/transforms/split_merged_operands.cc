@@ -18,17 +18,16 @@ limitations under the License.
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Support/Casting.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"  // from @llvm-project
+#include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/IR/Attributes.h"  // from @llvm-project
 #include "mlir/IR/Block.h"  // from @llvm-project
 #include "mlir/IR/Builders.h"  // from @llvm-project
-#include "mlir/IR/Function.h"  // from @llvm-project
+#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
+#include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
 #include "mlir/IR/MLIRContext.h"  // from @llvm-project
 #include "mlir/IR/Matchers.h"  // from @llvm-project
-#include "mlir/IR/Module.h"  // from @llvm-project
 #include "mlir/IR/Operation.h"  // from @llvm-project
 #include "mlir/IR/OperationSupport.h"  // from @llvm-project
-#include "mlir/IR/StandardTypes.h"  // from @llvm-project
 #include "mlir/IR/SymbolTable.h"  // from @llvm-project
 #include "mlir/IR/Types.h"  // from @llvm-project
 #include "mlir/IR/Value.h"  // from @llvm-project
@@ -37,6 +36,7 @@ limitations under the License.
 #include "mlir/Support/LLVM.h"  // from @llvm-project
 #include "mlir/Support/LogicalResult.h"  // from @llvm-project
 #include "tensorflow/compiler/mlir/lite/ir/tfl_ops.h"
+#include "tensorflow/compiler/mlir/lite/transforms/passes.h"
 #include "tensorflow/compiler/mlir/lite/utils/stateful_ops_utils.h"
 
 // Background info:
@@ -65,10 +65,14 @@ limitations under the License.
 namespace mlir {
 namespace TFL {
 namespace {
+#define GEN_PASS_DEF_SPLITMERGEDOPERANDSPASS
+#include "tensorflow/compiler/mlir/lite/transforms/passes.h.inc"
 
 struct SplitMergedOperandsPass
-    : public PassWrapper<SplitMergedOperandsPass, FunctionPass> {
-  void runOnFunction() override;
+    : public impl::SplitMergedOperandsPassBase<SplitMergedOperandsPass> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SplitMergedOperandsPass)
+
+  void runOnOperation() override;
 };
 
 LogicalResult DuplicateValueIfNeeded(Operation* op,
@@ -102,9 +106,9 @@ LogicalResult DuplicateValueIfNeeded(Operation* op,
   return success();
 }
 
-void SplitMergedOperandsPass::runOnFunction() {
+void SplitMergedOperandsPass::runOnOperation() {
   llvm::DenseSet<Value> stateful_values;
-  auto func = getFunction();
+  auto func = getOperation();
   OpBuilder builder(func);
   for (auto& bb : func.getBody()) {
     for (auto& op : bb) {
@@ -120,13 +124,9 @@ void SplitMergedOperandsPass::runOnFunction() {
 
 /// Creates an instance of the TensorFlow Lite dialect SplitMergedOperands
 /// pass.
-std::unique_ptr<OperationPass<FuncOp>> CreateSplitMergedOperandsPass() {
+std::unique_ptr<OperationPass<func::FuncOp>> CreateSplitMergedOperandsPass() {
   return std::make_unique<SplitMergedOperandsPass>();
 }
-
-static PassRegistration<SplitMergedOperandsPass> pass(
-    "tfl-split-merged-operands",
-    "Split merged stateful operands for tfl operations.");
 
 }  // namespace TFL
 }  // namespace mlir

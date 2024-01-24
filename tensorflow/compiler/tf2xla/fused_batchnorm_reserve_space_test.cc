@@ -20,12 +20,13 @@ limitations under the License.
 
 #include "absl/algorithm/container.h"
 #include "absl/strings/str_cat.h"
-#include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
+#include "unsupported/Eigen/CXX11/Tensor"  // from @eigen_archive
 #include "tensorflow/cc/framework/ops.h"
 #include "tensorflow/cc/framework/scope.h"
 #include "tensorflow/cc/ops/array_ops.h"
 #include "tensorflow/cc/ops/const_op.h"
 #include "tensorflow/cc/ops/nn_ops.h"
+#include "tensorflow/compiler/jit/flags.h"
 #include "tensorflow/core/framework/device_attributes.pb.h"
 #include "tensorflow/core/framework/graph.pb.h"
 #include "tensorflow/core/framework/tensor.h"
@@ -59,7 +60,7 @@ Status GetTestDevice(Session* session, string* test_device) {
 
   *test_device = found_gpu ? "GPU" : "CPU";
   VLOG(2) << "Using test device " << *test_device;
-  return Status::OK();
+  return OkStatus();
 }
 
 void FillZeros(Tensor* tensor) {
@@ -139,5 +140,11 @@ TEST(FusedBatchnormReserveSpaceTest, Test) {
   test::ExpectClose(results[0], results[1], /*atol=*/1e-4);
   test::ExpectClose(results[2], results[3], /*atol=*/1e-4);
 }
+
+static bool Initialized = [] {
+  tensorflow::GetXlaDeviceFlags()->tf_xla_enable_xla_devices = true;
+  return true;
+}();
+
 }  // namespace
 }  // namespace tensorflow

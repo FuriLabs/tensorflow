@@ -31,7 +31,7 @@ limitations under the License.
 
 #include <memory>
 
-#include "tensorflow/lite/c/common.h"
+#include "tensorflow/lite/core/c/common.h"
 
 namespace tflite {
 
@@ -56,21 +56,34 @@ class SimpleDelegateKernelInterface {
 
   // Actual subgraph inference should happen on this call.
   // Returns status, and signalling any errors.
+  // NOTE: Tensor data pointers (tensor->data) can change every inference, so
+  // the implementation of this method needs to take that into account.
   virtual TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) = 0;
 };
 
 // Pure Interface that clients should implement.
-// The Interface represents a delegate capabilities and provide factory
-// for SimpleDelegateKernelInterface
+// The Interface represents a delegate's capabilities and provides a factory
+// for SimpleDelegateKernelInterface.
 //
 // Clients should implement the following methods:
 // - IsNodeSupportedByDelegate
 // - Initialize
-// - name
+// - Name
 // - CreateDelegateKernelInterface
+// - DelegateOptions
 class SimpleDelegateInterface {
  public:
-  SimpleDelegateInterface() {}
+  // Properties of a delegate.  These are used by TfLiteDelegateFactory to
+  // help determine how to partition the graph, i.e. which nodes each delegate
+  // will get applied to.
+  struct Options {
+    // Maximum number of delegated subgraph, values <=0 means unlimited.
+    int max_delegated_partitions = 0;
+
+    // The minimum number of nodes allowed in a delegated graph, values <=0
+    // means unlimited.
+    int min_nodes_per_partition = 0;
+  };
 
   virtual ~SimpleDelegateInterface() {}
 
@@ -95,6 +108,10 @@ class SimpleDelegateInterface {
   // Caller takes ownership of the returned object.
   virtual std::unique_ptr<SimpleDelegateKernelInterface>
   CreateDelegateKernelInterface() = 0;
+
+  // Returns SimpleDelegateInterface::Options which has delegate properties
+  // relevant for graph partitioning.
+  virtual SimpleDelegateInterface::Options DelegateOptions() const = 0;
 };
 
 // Factory class that provides static methods to deal with SimpleDelegate
@@ -103,8 +120,12 @@ class TfLiteDelegateFactory {
  public:
   // Creates TfLiteDelegate from the provided SimpleDelegateInterface.
   // The returned TfLiteDelegate should be deleted using DeleteSimpleDelegate.
+  // A simple usage of the flags bit mask:
+  // CreateSimpleDelegate(..., kTfLiteDelegateFlagsAllowDynamicTensors |
+  // kTfLiteDelegateFlagsRequirePropagatedShapes)
   static TfLiteDelegate* CreateSimpleDelegate(
-      std::unique_ptr<SimpleDelegateInterface> simple_delegate);
+      std::unique_ptr<SimpleDelegateInterface> simple_delegate,
+      int64_t flags = kTfLiteDelegateFlagsNone);
 
   // Deletes 'delegate' the passed pointer must be the one returned
   // from CreateSimpleDelegate.

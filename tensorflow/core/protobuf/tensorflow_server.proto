@@ -25,7 +25,7 @@ option cc_enable_arenas = true;
 option java_outer_classname = "ServerProtos";
 option java_multiple_files = true;
 option java_package = "org.tensorflow.distruntime";
-option go_package = "github.com/tensorflow/tensorflow/tensorflow/go/core/core_protos_go_proto";
+option go_package = "github.com/tensorflow/tensorflow/tensorflow/go/core/protobuf/for_core_protos_go_proto";
 
 // Defines the configuration of a single TensorFlow server.
 message ServerDef {
@@ -37,6 +37,9 @@ message ServerDef {
   // NOTE(mrry): The `cluster` field must contain a `JobDef` with a `name` field
   // that matches this name.
   string job_name = 2;
+
+  // Replica this server manages.
+  int32 replica = 8;
 
   // The task index of this server in its job.
   //

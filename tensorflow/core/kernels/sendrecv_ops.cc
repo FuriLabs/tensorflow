@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "tensorflow/core/kernels/sendrecv_ops.h"
 
+#include <utility>
+
 #include "tensorflow/core/framework/attr_value.pb.h"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_def_util.h"
@@ -22,6 +24,7 @@ limitations under the License.
 #include "tensorflow/core/lib/strings/numbers.h"
 #include "tensorflow/core/lib/strings/strcat.h"
 #include "tensorflow/core/platform/logging.h"
+#include "tensorflow/core/profiler/lib/traceme.h"
 
 namespace tensorflow {
 
@@ -62,7 +65,7 @@ SendOp::SendOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
   uint64 send_device_incarnation;
   OP_REQUIRES_OK(
       ctx, ctx->GetAttr("send_device_incarnation",
-                        reinterpret_cast<int64*>(&send_device_incarnation)));
+                        reinterpret_cast<int64_t*>(&send_device_incarnation)));
   string tensor_name;
   OP_REQUIRES_OK(ctx, ctx->GetAttr("tensor_name", &tensor_name));
   key_prefix_ = GetRendezvousKeyPrefix(send_device, recv_device,
@@ -111,18 +114,22 @@ void SendOp::Compute(OpKernelContext* ctx) {
   }
 }
 
-string SendOp::TraceString(OpKernelContext* ctx, bool verbose) {
+string SendOp::TraceString(const OpKernelContext& ctx, bool verbose) const {
   const auto& attr = def().attr();
   auto src_it = attr.find("_src");
   auto dst_it = attr.find("_dst");
   const string& src = src_it != attr.end() ? src_it->second.s() : "";
   const string& dst = dst_it != attr.end() ? dst_it->second.s() : "";
-  return strings::StrCat(name_view(), ":", type_string_view(), "#from=", src,
-                         ",to=", dst, "#");
+  string op = profiler::TraceMeOp(name_view(), type_string_view());
+  return profiler::TraceMeEncode(
+      std::move(op),
+      {{"from", src}, {"to", dst}, {"key", parsed_key_.FullKey()}});
 }
 
 REGISTER_KERNEL_BUILDER(Name("_Send").Device(DEVICE_CPU), SendOp);
 REGISTER_KERNEL_BUILDER(Name("_Send").Device(DEVICE_DEFAULT), SendOp);
+REGISTER_KERNEL_BUILDER(Name("_Send").Device(DEVICE_TPU_SYSTEM), SendOp);
+REGISTER_KERNEL_BUILDER(Name("_HostSend").Device(DEVICE_TPU_SYSTEM), SendOp);
 
 // Public alias. Added for use in Lingvo.
 REGISTER_KERNEL_BUILDER(Name("Send").Device(DEVICE_CPU), SendOp);
@@ -139,7 +146,7 @@ RecvOp::RecvOp(OpKernelConstruction* ctx) : AsyncOpKernel(ctx) {
   uint64 send_device_incarnation;
   OP_REQUIRES_OK(
       ctx, ctx->GetAttr("send_device_incarnation",
-                        reinterpret_cast<int64*>(&send_device_incarnation)));
+                        reinterpret_cast<int64_t*>(&send_device_incarnation)));
   string tensor_name;
   OP_REQUIRES_OK(ctx, ctx->GetAttr("tensor_name", &tensor_name));
   key_prefix_ = GetRendezvousKeyPrefix(send_device, recv_device,
@@ -153,14 +160,16 @@ RecvOp::RecvOp(OpKernelConstruction* ctx) : AsyncOpKernel(ctx) {
   }
 }
 
-string RecvOp::TraceString(OpKernelContext* ctx, bool verbose) {
+string RecvOp::TraceString(const OpKernelContext& ctx, bool verbose) const {
   const auto& attr = def().attr();
   auto src_it = attr.find("_src");
   auto dst_it = attr.find("_dst");
   const string& src = src_it != attr.end() ? src_it->second.s() : "";
   const string& dst = dst_it != attr.end() ? dst_it->second.s() : "";
-  return strings::StrCat(name_view(), ":", type_string_view(), "#from=", src,
-                         ",to=", dst, "#");
+  string op = profiler::TraceMeOp(name_view(), type_string_view());
+  return profiler::TraceMeEncode(
+      std::move(op),
+      {{"from", src}, {"to", dst}, {"key", parsed_key_.FullKey()}});
 }
 
 namespace {
@@ -215,6 +224,8 @@ void RecvOp::ComputeAsync(OpKernelContext* ctx, DoneCallback done) {
 
 REGISTER_KERNEL_BUILDER(Name("_Recv").Device(DEVICE_CPU), RecvOp);
 REGISTER_KERNEL_BUILDER(Name("_Recv").Device(DEVICE_DEFAULT), RecvOp);
+REGISTER_KERNEL_BUILDER(Name("_Recv").Device(DEVICE_TPU_SYSTEM), RecvOp);
+REGISTER_KERNEL_BUILDER(Name("_HostRecv").Device(DEVICE_TPU_SYSTEM), RecvOp);
 
 // Public alias. Added for use in Lingvo.
 REGISTER_KERNEL_BUILDER(Name("Recv").Device(DEVICE_CPU), RecvOp);

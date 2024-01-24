@@ -16,10 +16,10 @@ limitations under the License.
 #include "tensorflow/compiler/tf2xla/kernels/cwise_ops.h"
 #include "tensorflow/compiler/tf2xla/xla_helpers.h"
 #include "tensorflow/compiler/tf2xla/xla_op_registry.h"
-#include "tensorflow/compiler/xla/client/lib/constants.h"
-#include "tensorflow/compiler/xla/client/lib/math.h"
-#include "tensorflow/compiler/xla/client/xla_builder.h"
-#include "tensorflow/compiler/xla/literal.h"
+#include "xla/client/lib/constants.h"
+#include "xla/client/lib/math.h"
+#include "xla/client/xla_builder.h"
+#include "xla/literal.h"
 #include "tensorflow/core/framework/kernel_def_builder.h"
 #include "tensorflow/core/framework/types.h"
 
@@ -62,11 +62,11 @@ xla::XlaOp ProximalGradientDescentUpdate(xla::XlaOp var, xla::XlaOp lr,
   xla::XlaOp one = xla::ScalarLike(lr, 1.0);
   xla::XlaOp zero = xla::ScalarLike(lr, 0.0);
   xla::XlaOp prox_var = var - grad * lr;
-  xla::XlaOp l1_gt_zero = xla::Sign(prox_var) *
-                          xla::Max(xla::Abs(prox_var) - lr * l1, zero) /
-                          (one + lr * l2);
-  xla::XlaOp l1_le_zero = prox_var / (one + lr * l2);
-  return xla::Select(xla::Gt(l1, zero), l1_gt_zero, l1_le_zero);
+  xla::XlaOp l1_gt_zero =
+      xla::Sign(prox_var) * xla::Max(xla::Abs(prox_var) - lr * l1, zero);
+  xla::XlaOp l1_le_zero = prox_var;
+  return xla::Select(xla::Gt(l1, zero), l1_gt_zero, l1_le_zero) /
+         (one + lr * l2);
 }
 
 class ResourceApplyProximalGradientDescent : public XlaOpKernel {

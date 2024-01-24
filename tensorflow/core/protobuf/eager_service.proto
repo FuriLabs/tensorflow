@@ -11,7 +11,7 @@ import "tensorflow/core/framework/versions.proto";
 import "tensorflow/core/protobuf/remote_tensor_handle.proto";
 import "tensorflow/core/protobuf/tensorflow_server.proto";
 
-option go_package = "github.com/tensorflow/tensorflow/tensorflow/go/core/core_protos_go_proto";
+option go_package = "github.com/tensorflow/tensorflow/tensorflow/go/core/protobuf/for_core_protos_go_proto";
 
 // A proto representation of an eager operation.
 message Operation {
@@ -70,6 +70,8 @@ message QueueItem {
     // nodes to finish on the remote executor and report status.
     SyncRemoteExecutorForStream sync_remote_executor_for_stream = 6;
     SendPackedHandleOp send_packed_handle = 7;
+    // Takes a FunctionDef signature name and remove it from the remote worker.
+    RemoveFunctionOp remove_function = 8;
   }
 }
 
@@ -77,6 +79,8 @@ message QueueResponse {
   // `shape` and `tensor` cannot be set in the same response.
   // Shapes of output tensors for creating remote TensorHandles.
   repeated TensorShapeProto shape = 1;
+  // Optional. If set, represents the output devices of a function.
+  repeated string device = 3;
 
   // Output tensors of a remote function. Set when Operation.id is invalid.
   repeated TensorProto tensor = 2;
@@ -178,6 +182,9 @@ message RunComponentFunctionRequest {
   fixed64 context_id = 1;
 
   Operation operation = 2;
+
+  // The output indices of its parent function.
+  repeated int32 output_num = 3;
 }
 
 message RunComponentFunctionResponse {
@@ -216,6 +223,11 @@ message RegisterFunctionOp {
   // add FunctionDefs here to the function cache in EagerContext since they
   // won't be executed as KernelAndDevices.
   FunctionDefLibrary library = 3;
+}
+
+message RemoveFunctionOp {
+  // The signature name of function_def to be removed from remote workers.
+  string function_name = 1;
 }
 
 // Cleanup the step state of a multi-device function (e.g. tensors buffered by
@@ -283,18 +295,24 @@ service EagerService {
   // This initializes the worker, informing it about the other workers in the
   // cluster and exchanging authentication tokens which will be used in all
   // other RPCs to detect whether the worker has restarted.
-  rpc CreateContext(CreateContextRequest) returns (CreateContextResponse);
+  rpc CreateContext(CreateContextRequest) returns (CreateContextResponse) {
+    // [AUTOMATION]: Internal rpc option goes here.
+  }
 
   // This updates the eager context on an existing worker when updating the set
   // of servers in a distributed eager cluster.
-  rpc UpdateContext(UpdateContextRequest) returns (UpdateContextResponse);
+  rpc UpdateContext(UpdateContextRequest) returns (UpdateContextResponse) {
+    // [AUTOMATION]: Internal rpc option goes here.
+  }
 
   // This takes a list of Execute and DeleteTensorHandle operations and enqueues
   // (in async mode) or executes (in sync mode) them on the remote server.
   // All outputs of ops which were not explicitly deleted with
   // DeleteTensorHandle entries will be assumed to be alive and are usable by
   // future calls to Enqueue.
-  rpc Enqueue(EnqueueRequest) returns (EnqueueResponse);
+  rpc Enqueue(EnqueueRequest) returns (EnqueueResponse) {
+    // [AUTOMATION]: Internal rpc option goes here.
+  }
 
   // A streaming version of Enqueue.
   // Current server implementation sends one response per received request.
@@ -302,11 +320,15 @@ service EagerService {
   // can be sent without waiting for a response to the previous request. This
   // synchronization is required in the regular Enqueue call because gRPC does
   // not guarantee to preserve request order.
-  rpc StreamingEnqueue(stream EnqueueRequest) returns (stream EnqueueResponse);
+  rpc StreamingEnqueue(stream EnqueueRequest) returns (stream EnqueueResponse) {
+    // [AUTOMATION]: Internal rpc option goes here.
+  }
 
   // Takes a set of op IDs and waits until those ops are done. Returns any error
   // in the stream so far.
-  rpc WaitQueueDone(WaitQueueDoneRequest) returns (WaitQueueDoneResponse);
+  rpc WaitQueueDone(WaitQueueDoneRequest) returns (WaitQueueDoneResponse) {
+    // [AUTOMATION]: Internal rpc option goes here.
+  }
 
   // This takes an Eager operation and executes it in async mode on the remote
   // server. Different from EnqueueRequest, ops/functions sent through this
@@ -322,7 +344,9 @@ service EagerService {
   // For executing ops/main functions, use Enqueue or StreamingEnqueue instead
   // for correct ordering.
   rpc RunComponentFunction(RunComponentFunctionRequest)
-      returns (RunComponentFunctionResponse);
+      returns (RunComponentFunctionResponse) {
+    // [AUTOMATION]: Internal rpc option goes here.
+  }
 
   // Contexts are always created with a deadline and no RPCs within a deadline
   // will trigger a context garbage collection. KeepAlive calls can be used to
@@ -331,9 +355,13 @@ service EagerService {
   // ID and the current context view ID. This is useful for checking if the
   // remote worker (potentially with the same task name and hostname / port) is
   // replaced with a new process.
-  rpc KeepAlive(KeepAliveRequest) returns (KeepAliveResponse);
+  rpc KeepAlive(KeepAliveRequest) returns (KeepAliveResponse) {
+    // [AUTOMATION]: Internal rpc option goes here.
+  }
 
   // Closes the context. No calls to other methods using the existing context ID
   // are valid after this.
-  rpc CloseContext(CloseContextRequest) returns (CloseContextResponse);
+  rpc CloseContext(CloseContextRequest) returns (CloseContextResponse) {
+    // [AUTOMATION]: Internal rpc option goes here.
+  }
 }

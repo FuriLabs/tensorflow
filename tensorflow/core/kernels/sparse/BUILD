@@ -1,15 +1,22 @@
 # Description: Op kernels for sparse matrix operations.
 
+load("//tensorflow/core/platform:rules_cc.bzl", "cc_library")
 load(
     "//tensorflow:tensorflow.bzl",
     "if_cuda_or_rocm",
     "tf_cc_test",
-    "tf_kernel_library",
 )
+load(
+    "@local_config_rocm//rocm:build_defs.bzl",
+    "if_rocm",
+)
+load("//tensorflow:tensorflow.default.bzl", "tf_kernel_library")
 
 package(
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = ["//visibility:public"],
-    licenses = ["notice"],  # Apache 2.0
+    features = ["-layering_check"],
+    licenses = ["notice"],
 )
 
 cc_library(
@@ -18,7 +25,7 @@ cc_library(
     hdrs = ["sparse_matrix.h"],
     deps = [
         "//tensorflow/core:framework",
-        "//third_party/eigen3",
+        "@eigen_archive//:eigen3",
     ],
     alwayslink = 1,
 )
@@ -56,7 +63,6 @@ tf_kernel_library(
     ],
     deps = [
         ":sparse_matrix",
-        "//third_party/eigen3",
         "//tensorflow/core:array_ops_op_lib",
         "//tensorflow/core:bitwise_ops_op_lib",
         "//tensorflow/core:framework",
@@ -75,13 +81,17 @@ tf_kernel_library(
         "//tensorflow/core/kernels:dense_update_functor",
         "//tensorflow/core/kernels:fill_functor",
         "//tensorflow/core/kernels:gather_nd_op",
+        "//tensorflow/core/kernels:gpu_prim_hdrs",
         "//tensorflow/core/kernels:scatter_nd_op",
         "//tensorflow/core/kernels:slice_op",
+        "//tensorflow/core/kernels:sparse_utils",
         "//tensorflow/core/kernels:transpose_functor",
-        "//tensorflow/core/kernels:gpu_prim_hdrs",
+        "@eigen_archive//:eigen3",
     ] + if_cuda_or_rocm([
-        "//tensorflow/core/kernels:cuda_solvers",
-        "//tensorflow/core/kernels:cuda_sparse",
+        "//tensorflow/core/util:cuda_solvers",
+        "//tensorflow/core/util:cuda_sparse",
+    ]) + if_rocm([
+        "//tensorflow/core/util:rocm_solvers",
     ]),
     alwayslink = 1,
 )
@@ -98,6 +108,7 @@ tf_cc_test(
         "//tensorflow/core:lib",
         "//tensorflow/core:test",
         "//tensorflow/core:testlib",
-        "//third_party/eigen3",
+        "//tensorflow/core/platform:status_matchers",
+        "@eigen_archive//:eigen3",
     ],
 )

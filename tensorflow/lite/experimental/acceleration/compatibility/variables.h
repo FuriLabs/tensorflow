@@ -56,6 +56,10 @@ constexpr char kGPUVendor[] = "tflite.gpu_vendor";
 // "opengl_es_3.2_v@328.0_(git@6fb5a5b,_ife855c4895)_(date:08/21/18)"
 constexpr char kOpenGLDriverVersion[] = "tflite.opengl_driver_version";
 
+// Allowlist use case. This property is used to allow joining multiple lists
+// into a single decision tree.
+constexpr char kUseCase[] = "tflite.use_case";
+
 // NNAPI-related properties.
 //
 // NNAPI accelerator name, returned by ANeuralNetworksDevice_getName. E.g.,
@@ -71,14 +75,20 @@ namespace gpu {
 // GPU-delegate derived properties.
 
 // Whether the GPU delegate works in general.
-// ("UNSET", "UNKNOWN", "SUPPORTED", "UNSUPPORTED").
+// Possible values are ("", "SUPPORTED", "UNSUPPORTED"). An empty value for
+// this field means that the device is unsupported.
 constexpr char kStatus[] = "tflite.gpu.status";
 
-// Whether OpenCL should be allowed. Possible values are the SupportStatus enums
-// ("UNSET", "UNKNOWN", "SUPPORTED", "UNSUPPORTED").
-constexpr char kOpenCLStatus[] = "tflite.gpu.opencl_status";
 constexpr char kStatusSupported[] = "SUPPORTED";
+constexpr char kStatusUnknown[] = "UNKNOWN";
 constexpr char kStatusUnsupported[] = "UNSUPPORTED";
+
+enum class CompatibilityStatus {
+  kUnknown = 0,
+  kSupported,
+  kUnsupported,
+};
+
 }  // namespace gpu
 
 }  // namespace acceleration

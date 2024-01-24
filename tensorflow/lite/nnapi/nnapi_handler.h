@@ -15,6 +15,8 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_NNAPI_NNAPI_HANDLER_H_
 #define TENSORFLOW_LITE_NNAPI_NNAPI_HANDLER_H_
 
+#include <string>
+
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/lite/nnapi/NeuralNetworksTypes.h"
 #include "tensorflow/lite/nnapi/nnapi_implementation.h"
@@ -116,6 +118,11 @@ class NnApiHandler {
     nnapi_->ANeuralNetworksModel_addOperand =
         [](ANeuralNetworksModel* model,
            const ANeuralNetworksOperandType* type) { return Value; };
+  }
+
+  void StubAddOperandWith(int(stub)(ANeuralNetworksModel* model,
+                                    const ANeuralNetworksOperandType* type)) {
+    nnapi_->ANeuralNetworksModel_addOperand = stub;
   }
 
   template <int Value>
@@ -266,6 +273,23 @@ class NnApiHandler {
     nnapi_->ANeuralNetworksEvent_wait = [](ANeuralNetworksEvent* event) {
       return Value;
     };
+  }
+
+  template <int Value>
+  void SetPriorityReturns() {
+    nnapi_->ANeuralNetworksCompilation_setPriority =
+        [](ANeuralNetworksCompilation* compilation, int priority) -> int {
+      return Value;
+    };
+  }
+
+  template <int Value>
+  void SetOperandSymmPerChannelQuantParamsReturns() {
+    nnapi_->ANeuralNetworksModel_setOperandSymmPerChannelQuantParams =
+        [](ANeuralNetworksModel* model, int32_t index,
+           const ANeuralNetworksSymmPerChannelQuantParams* channelQuant) {
+          return Value;
+        };
   }
 
   /*

@@ -19,7 +19,7 @@ limitations under the License.
 
 #include <string>
 
-#include "pybind11/pybind11.h"
+#include "pybind11/pybind11.h"  // from @pybind11
 #include "tensorflow/lite/schema/schema_generated.h"
 
 namespace pybind11 {
@@ -33,7 +33,7 @@ PYBIND11_MODULE(_pywrap_modify_model_interface, m) {
           return tflite::optimize::ModifyModelInterface(
               input_file, output_file,
               static_cast<tflite::TensorType>(input_type),
-              static_cast<tflite::TensorType>(input_type));
+              static_cast<tflite::TensorType>(output_type));
         });
 }
 

@@ -34,13 +34,13 @@ class Pool2dOpBuilder : public OpBuilder {
   TfLiteStatus RegisterOutputs(const TfLiteIntArray* outputs,
                                TfLiteContext* context) override;
 
-  ~Pool2dOpBuilder();
+  ~Pool2dOpBuilder() override;
 
  private:
   TensorID node_output_;
   std::vector<int> stride_shape_;
   std::vector<int> filter_shape_;
-  float data_min_, data_max_, output_min_, output_max_;
+  float output_min_, output_max_;
 };
 
 }  // namespace hexagon

@@ -50,8 +50,9 @@ class RenamedDevice : public Device {
     return underlying_device_->tensorflow_cpu_worker_threads();
   }
 
-  const GpuDeviceInfo* tensorflow_gpu_device_info() const override {
-    return underlying_device_->tensorflow_gpu_device_info();
+  const DeviceBase::AcceleratorDeviceInfo* tensorflow_accelerator_device_info()
+      const override {
+    return underlying_device_->tensorflow_accelerator_device_info();
   }
 
   Allocator* GetAllocator(AllocatorAttributes attr) override {
@@ -59,7 +60,7 @@ class RenamedDevice : public Device {
   }
 
   Allocator* GetScopedAllocator(AllocatorAttributes attr,
-                                int64 step_id) override {
+                                int64_t step_id) override {
     return underlying_device_->GetScopedAllocator(attr, step_id);
   }
 
@@ -91,11 +92,6 @@ class RenamedDevice : public Device {
     return underlying_device_->has_eigen_cpu_device();
   }
 
-#ifdef TENSORFLOW_USE_SYCL
-  const Eigen::SyclDevice* eigen_sycl_device() const override {
-    return underlying_device_->eigen_sycl_device();
-  }
-#endif
 
   PerOpGpuDevice* MakeGpuDevice() override {
     return underlying_device_->MakeGpuDevice();
@@ -153,6 +149,10 @@ class RenamedDevice : public Device {
   }
 
   bool IsLocal() const override { return underlying_device_->IsLocal(); }
+
+  bool IsRemoteCallAllowed() const override {
+    return underlying_device_->IsRemoteCallAllowed();
+  }
 
  private:
   RenamedDevice(Device* underlying, const DeviceAttributes& attributes,

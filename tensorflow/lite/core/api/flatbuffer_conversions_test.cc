@@ -19,7 +19,7 @@ limitations under the License.
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include "tensorflow/lite/c/builtin_op_data.h"
+#include "tensorflow/lite/core/c/builtin_op_data.h"
 #include "tensorflow/lite/string_type.h"
 
 namespace tflite {
@@ -82,15 +82,12 @@ class FlatbufferConversionsTest : public ::testing::Test {
   flatbuffers::FlatBufferBuilder builder_;
 };
 
-TEST_F(FlatbufferConversionsTest, ParseBadSqueeze) {
+TEST_F(FlatbufferConversionsTest, ParseSqueezeAll) {
   const Operator* op = BuildTestOperator(
       BuiltinOptions_SqueezeOptions, CreateSqueezeOptions(builder_).Union());
   void* output_data = nullptr;
-  EXPECT_NE(kTfLiteOk, ParseOpData(op, BuiltinOperator_SQUEEZE, &mock_reporter_,
+  EXPECT_EQ(kTfLiteOk, ParseOpData(op, BuiltinOperator_SQUEEZE, &mock_reporter_,
                                    &mock_allocator_, &output_data));
-  EXPECT_THAT(mock_reporter_.GetAsString(),
-              ::testing::ContainsRegex(
-                  "Input array not provided for operation 'squeeze'"));
 }
 
 TEST_F(FlatbufferConversionsTest, ParseDynamicReshape) {
@@ -158,9 +155,11 @@ TEST_F(FlatbufferConversionsTest, TestConvertTensorTypeFloat16) {
   EXPECT_EQ(kTfLiteFloat16, type);
 }
 
-}  // namespace tflite
-
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+TEST_F(FlatbufferConversionsTest, TestConvertTensorTypeInt4) {
+  TfLiteType type;
+  EXPECT_EQ(kTfLiteOk,
+            ConvertTensorType(TensorType_INT4, &type, &mock_reporter_));
+  EXPECT_EQ(kTfLiteInt4, type);
 }
+
+}  // namespace tflite

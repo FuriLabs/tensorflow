@@ -1,33 +1,34 @@
-load("//tensorflow:tensorflow.bzl", "tf_grpc_cc_dependency")
+load("//tensorflow/core/platform:rules_cc.bzl", "cc_library")
+load("//tensorflow:tensorflow.default.bzl", "tf_grpc_cc_dependencies")
 load("//tensorflow:tensorflow.bzl", "tf_cc_test")
 
 package(
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
         "//tensorflow:internal",
     ],
-    licenses = ["notice"],  # Apache 2.0
+    licenses = ["notice"],
 )
-
-exports_files(["LICENSE"])
 
 cc_library(
     name = "grpc_eager_service",
     srcs = ["grpc_eager_service.h"],
     hdrs = ["grpc_eager_service.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
-        "//tensorflow/core:eager_service_proto_cc",
-        "//tensorflow/stream_executor/platform",
-        tf_grpc_cc_dependency(),
-    ],
+        "//tensorflow/core/protobuf:eager_service_cc_grpc_proto",
+        "@local_xla//xla/stream_executor/platform",
+    ] + tf_grpc_cc_dependencies(),
 )
 
 cc_library(
     name = "grpc_eager_client",
     srcs = ["grpc_eager_client.cc"],
     hdrs = ["grpc_eager_client.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         ":grpc_eager_service",
-        "//tensorflow/core:eager_service_proto_cc",
+        "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core:lib_internal",
         "//tensorflow/core/distributed_runtime:call_options",
@@ -36,27 +37,29 @@ cc_library(
         "//tensorflow/core/distributed_runtime/rpc:grpc_client_cq_tag",
         "//tensorflow/core/distributed_runtime/rpc:grpc_state",
         "//tensorflow/core/distributed_runtime/rpc:grpc_util",
-        tf_grpc_cc_dependency(),
-    ],
+        "//tensorflow/core/platform:error_payloads",
+        "//tensorflow/core/protobuf:eager_service_proto_cc",
+        "//tensorflow/core/protobuf:for_core_protos_cc",
+        "@local_tsl//tsl/distributed_runtime:call_options",
+    ] + tf_grpc_cc_dependencies(),
 )
 
 cc_library(
     name = "grpc_eager_service_impl",
     srcs = ["grpc_eager_service_impl.cc"],
     hdrs = ["grpc_eager_service_impl.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         ":grpc_eager_service",
-        "//tensorflow/core:eager_service_proto_cc",
         "//tensorflow/core:framework",
-        "//tensorflow/core:ptr_util",
         "//tensorflow/core/distributed_runtime/eager:eager_service_impl",
-        "//tensorflow/core/distributed_runtime/rpc:async_service_interface",
-        "//tensorflow/core/distributed_runtime/rpc:grpc_call",
         "//tensorflow/core/distributed_runtime/rpc:grpc_channel",
         "//tensorflow/core/distributed_runtime/rpc:grpc_util",
         "//tensorflow/core/distributed_runtime/rpc:grpc_worker_cache",
-        tf_grpc_cc_dependency(),
-    ],
+        "//tensorflow/core/protobuf:eager_service_proto_cc",
+        "@local_tsl//tsl/distributed_runtime/rpc:async_service_interface",
+        "@local_tsl//tsl/distributed_runtime/rpc:grpc_call",
+    ] + tf_grpc_cc_dependencies(),
 )
 
 tf_cc_test(
@@ -65,6 +68,7 @@ tf_cc_test(
     srcs = [
         "grpc_eager_client_test.cc",
     ],
+    # copybara:uncomment extra_copts = ["-Wthread-safety-analysis"],
     deps = [
         ":grpc_eager_client",
         "//tensorflow/c:tf_status_headers",
@@ -72,6 +76,7 @@ tf_cc_test(
         "//tensorflow/core:test_main",
         "//tensorflow/core/distributed_runtime/rpc:grpc_channel",
         "//tensorflow/core/platform:blocking_counter",
+        "//tensorflow/core/platform:env",
         "//tensorflow/core/platform:status",
         "//tensorflow/core/platform:strcat",
     ],

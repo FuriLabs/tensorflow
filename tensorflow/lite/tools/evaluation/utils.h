@@ -21,28 +21,47 @@ limitations under the License.
 #include <unordered_set>
 #include <vector>
 
+#if !TFLITE_WITH_STABLE_ABI
+// TODO(b/240438534): enable nnapi.
 #if defined(__ANDROID__)
-#include "tensorflow/lite/delegates/gpu/delegate.h"
-#include "tensorflow/lite/delegates/nnapi/nnapi_delegate.h"
-#if (defined(__arm__) || defined(__aarch64__))
-#include "tensorflow/lite/delegates/hexagon/hexagon_delegate.h"
-#endif
+#define TFLITE_SUPPORTS_NNAPI_DELEGATE 1
+#define TFLITE_SUPPORTS_GPU_DELEGATE 1
+#elif defined(CL_DELEGATE_NO_GL)
+#define TFLITE_SUPPORTS_GPU_DELEGATE 1
+#endif  // defined(__ANDROID__)
+#endif  // TFLITE_WITH_STABLE_ABI
+
+// XNNPACK does not support s390x
+// (see <https://github.com/tensorflow/tensorflow/pull/51655>).
+#ifdef __s390x__
+#define TFLITE_WITHOUT_XNNPACK 1
 #endif
 
-// TODO(b/149248802): include XNNPACK delegate when the issue is resolved.
-#if !defined(__Fuchsia__) || defined(TFLITE_WITHOUT_XNNPACK)
-#include "tensorflow/lite/delegates/xnnpack/xnnpack_delegate.h"
+#if TFLITE_SUPPORTS_GPU_DELEGATE
+#include "tensorflow/lite/delegates/gpu/delegate.h"
 #endif
+
+#if TFLITE_ENABLE_HEXAGON
+#include "tensorflow/lite/delegates/hexagon/hexagon_delegate.h"
+#endif
+
+#if TFLITE_SUPPORTS_NNAPI_DELEGATE
+#include "tensorflow/lite/delegates/nnapi/nnapi_delegate.h"
+#endif  // TFLITE_SUPPORTS_NNAPI_DELEGATE
+
+#ifndef TFLITE_WITHOUT_XNNPACK
+#include "tensorflow/lite/delegates/xnnpack/xnnpack_delegate.h"
+#endif  // !defined(TFLITE_WITHOUT_XNNPACK)
 
 #include "tensorflow/lite/c/common.h"
 
 namespace tflite {
 namespace evaluation {
 
-// Same w/ Interpreter::TfLiteDelegatePtr to avoid pulling
-// tensorflow/lite/interpreter.h dependency
+// Same as Interpreter::TfLiteDelegatePtr, defined here to avoid pulling
+// in tensorflow/lite/interpreter.h dependency.
 using TfLiteDelegatePtr =
-    std::unique_ptr<TfLiteDelegate, void (*)(TfLiteDelegate*)>;
+    std::unique_ptr<TfLiteOpaqueDelegate, void (*)(TfLiteOpaqueDelegate*)>;
 
 std::string StripTrailingSlashes(const std::string& path);
 
@@ -61,31 +80,34 @@ inline TfLiteStatus GetSortedFileNames(const std::string& directory,
                             std::unordered_set<std::string>());
 }
 
+// Returns nullptr on error, e.g. if NNAPI isn't supported on this platform.
 TfLiteDelegatePtr CreateNNAPIDelegate();
-#if defined(__ANDROID__)
+#if TFLITE_SUPPORTS_NNAPI_DELEGATE
 TfLiteDelegatePtr CreateNNAPIDelegate(StatefulNnApiDelegate::Options options);
-#endif
+#endif  // TFLITE_SUPPORTS_NNAPI_DELEGATE
 
 TfLiteDelegatePtr CreateGPUDelegate();
-#if defined(__ANDROID__)
+#if TFLITE_SUPPORTS_GPU_DELEGATE
 TfLiteDelegatePtr CreateGPUDelegate(TfLiteGpuDelegateOptionsV2* options);
-#endif
+#endif  // TFLITE_SUPPORTS_GPU_DELEGATE
 
 TfLiteDelegatePtr CreateHexagonDelegate(
     const std::string& library_directory_path, bool profiling);
-#if defined(__ANDROID__) && (defined(__arm__) || defined(__aarch64__))
+#if TFLITE_ENABLE_HEXAGON
 TfLiteDelegatePtr CreateHexagonDelegate(
     const TfLiteHexagonDelegateOptions* options,
     const std::string& library_directory_path);
 #endif
 
-// TODO(b/149248802): include XNNPACK delegate when the issue is resolved.
-#if !defined(__Fuchsia__) || defined(TFLITE_WITHOUT_XNNPACK)
+#ifndef TFLITE_WITHOUT_XNNPACK
+TfLiteXNNPackDelegateOptions XNNPackDelegateOptionsDefault();
 TfLiteDelegatePtr CreateXNNPACKDelegate();
 TfLiteDelegatePtr CreateXNNPACKDelegate(
     const TfLiteXNNPackDelegateOptions* options);
-#endif
+#endif  // !defined(TFLITE_WITHOUT_XNNPACK)
 TfLiteDelegatePtr CreateXNNPACKDelegate(int num_threads);
+
+TfLiteDelegatePtr CreateCoreMlDelegate();
 }  // namespace evaluation
 }  // namespace tflite
 

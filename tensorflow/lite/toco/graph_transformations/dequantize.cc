@@ -35,7 +35,7 @@ void DequantizeBuffer(Array* array) {
   auto& new_data = array->GetMutableBuffer<ArrayDataType::kFloat>().data;
   new_data.resize(old_data.size());
   const auto& qparams = array->GetQuantizationParams();
-  for (int i = 0; i < old_data.size(); i++) {
+  for (int i = 0, end = old_data.size(); i < end; i++) {
     new_data[i] = qparams.scale * (old_data[i] - qparams.zero_point);
   }
 }
@@ -157,7 +157,7 @@ bool DequantizeArray(const std::string& array_name,
   new_array.data_type = ArrayDataType::kFloat;
   new_array.copy_shape(array->shape());
   new_array.GetOrCreateMinMax() = array->GetMinMax();
-  fakequant_op->minmax.reset(new MinMax);
+  fakequant_op->minmax = std::make_unique<MinMax>();
   *fakequant_op->minmax = array->GetMinMax();
   fakequant_op->narrow_range = array->narrow_range;
   if (must_insert_fakequant_before) {
@@ -195,10 +195,10 @@ bool DequantizeArray(const std::string& array_name,
   if (op->type == OperatorType::kDequantize) {
     auto& input_array = model->GetArray(op->inputs[0]);
     if (input_array.data_type == ArrayDataType::kFloat) {
-      return ::tensorflow::Status::OK();
+      return ::tensorflow::OkStatus();
     }
     if (input_array.final_data_type != ArrayDataType::kFloat) {
-      return ::tensorflow::Status::OK();
+      return ::tensorflow::OkStatus();
     }
     input_array.data_type = ArrayDataType::kFloat;
     input_array.quantization_params = nullptr;
@@ -206,10 +206,11 @@ bool DequantizeArray(const std::string& array_name,
     output_array.data_type = ArrayDataType::kFloat;
     output_array.quantization_params = nullptr;
     *modified = RemoveTrivialPassthroughOp(this, model, op_index);
-    return ::tensorflow::Status::OK();
+    return ::tensorflow::OkStatus();
   }
 
   std::vector<std::string> arrays;
+  arrays.reserve(op->inputs.size());
   for (const std::string& input : op->inputs) {
     arrays.push_back(input);
   }
@@ -224,7 +225,7 @@ bool DequantizeArray(const std::string& array_name,
   }
 
   *modified = changed;
-  return ::tensorflow::Status::OK();
+  return ::tensorflow::OkStatus();
 }
 
 }  // namespace toco

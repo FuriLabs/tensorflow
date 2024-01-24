@@ -15,6 +15,7 @@ limitations under the License.
 #include "tensorflow/core/distributed_runtime/rpc/grpc_state.h"
 
 #include "absl/strings/str_format.h"
+#include "tensorflow/core/distributed_runtime/rpc/grpc_util.h"
 
 namespace tensorflow {
 
@@ -55,7 +56,7 @@ void UntypedStreamingRPCState::Tag::OnCompleted(bool ok) {
 
 void Exchange::Complete(Status status) {
   if (status.ok()) {
-    if (!GrpcMaybeParseProto(&response_buf_, response_)) {
+    if (!tsl::GrpcMaybeParseProto(&response_buf_, response_)) {
       status.Update(errors::Internal("could not parse rpc response"));
     }
   }
@@ -203,7 +204,7 @@ void ExchangeQueue::CheckInvariants() {
     return;
   }
 
-  for (int i = 1; i < exchanges_.size(); ++i) {
+  for (int i = 1, end = exchanges_.size(); i < end; ++i) {
     const Exchange& e0 = exchanges_[i - 1];
     const Exchange& e1 = exchanges_[i];
     // The first exchange in the pair is the one that arrived later and is
