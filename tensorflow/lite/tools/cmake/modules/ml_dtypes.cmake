@@ -31,6 +31,8 @@ OverridableFetchContent_Declare(
   # GIT_SHALLOW TRUE
   GIT_PROGRESS TRUE
   SOURCE_DIR "${CMAKE_BINARY_DIR}/ml_dtypes"
+  LICENSE_FILE "LICENSE"
+  LICENSE_URL "https://raw.githubusercontent.com/jax-ml/ml_dtypes/refs/heads/main/LICENSE"
 )
 OverridableFetchContent_GetProperties(ml_dtypes)
 if(NOT ml_dtypes_POPULATED)
