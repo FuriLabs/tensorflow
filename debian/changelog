@@ -1,27 +1,12 @@
-tensorflow (2.15.0-1) UNRELEASED; urgency=medium
+tensorflow (2.14.1-1) UNRELEASED; urgency=medium
 
-  * New upstream version
-  * Standards-Version: 4.6.2 (routine-update)
-  * Remove trailing whitespace in debian/copyright (routine-update)
-  * Do not parse d/changelog (routine-update)
-  * Add salsa-ci file (routine-update)
-  * Rules-Requires-Root: no (routine-update)
-  * No tab in license text (routine-update)
-  * Update lintian override info format in d/source/lintian-overrides line 1-4.
-  * Update renamed lintian tag names in lintian overrides.
-  * Set upstream metadata fields: Repository, Security-Contact.
-  * Remove listed license files (third_party/icu/data/LICENSE) from copyright.
-  * Remove unused license definitions for BSD-3-Clause, LGPL-2.1+.
-  * Remove obsolete field Name from debian/upstream/metadata (already present in
-    machine-readable debian/copyright).
-  * Seems current bazel in Debian does not support option
-     --experimental_link_static_libraries_once thus ignoring it for the moment
-  * Builds-Depends: s/libcurl4-nss-dev/libcurl4-gnutls-dev | libcurl-ssl-dev/
-  * Do not Build-Depends_ python3-keras since it is not installable since
-    theano was removed.  Seemse to be circular dependency since
-    python3-tensorflow is needed in keras
+  * New upstream version 2.14.1
+  * Drop all packaging parts requiring bazel since this work is stuck for now.
+    With the approval of Mo Zhou and Andreas Tille!
+  * Build tensorflow-lite which doesn't require bazel but can be built with
+    cmake.
 
- -- Andreas Tille <tille@debian.org>  Wed, 24 Jan 2024 09:04:10 +0100
+ -- Dylan Aïssi <daissi@debian.org>  Tue, 08 Apr 2025 16:40:32 +0200
 
 tensorflow (2.3.1-1) experimental; urgency=medium
 

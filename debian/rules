@@ -1,96 +1,29 @@
 #!/usr/bin/make -f
+
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
-export PYTHON_BIN_PATH=/usr/bin/python3
-export TF_IGNORE_MAX_BAZEL_VERSION=1
-export HOME=/tmp
-# not $(CURDIR), that leads to recursive symlinks
-PREFIX=/usr
-LIB_PATH=lib/$(DEB_HOST_MULTIARCH)
-
-include /usr/share/dpkg/default.mk
-
-ifeq (,$(filter terse,$(DEB_BUILD_OPTIONS)))
-        BAZELOPTS=-s
-endif
-
 
 %:
-	dh $@
+	dh $@ --sourcedirectory=tensorflow/lite
 
 override_dh_auto_configure:
-	printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n' /usr/lib/python3/dist-packages N N N N -Wno-sign-compare N | ./configure
-
-override_dh_auto_build:
-	bazel build \
-		-k $(BAZELOPTS)\
-		--verbose_failures \
-		--repository_cache= \
-		--config=opt \
-		--copt=-g \
-		--proto_compiler=protoc \
-		--repo_env=TF_SYSTEM_LIBS=nsync,curl,double_conversion,snappy,gif,zlib,com_google_protobuf,com_github_grpc_grpc,jsoncpp_git,libjpeg_turbo,nasm,png,highwayhash \
-		--override_repository=bazel_skylib=$(CURDIR)/debian/mock_repos/bazel_skylib \
-		--override_repository=rules_cc=$(CURDIR)/debian/mock_repos/rules_cc \
-		--override_repository=rules_java=$(CURDIR)/debian/mock_repos/rules_java \
-		//tensorflow:tensorflow_cc
-	bazel build \
-		-k $(BAZELOPTS)\
-		--verbose_failures \
-		--repository_cache= \
-		--config=opt \
-		--copt=-g \
-		--proto_compiler=protoc \
-		--repo_env=TF_SYSTEM_LIBS=nsync,curl,double_conversion,snappy,gif,zlib,com_google_protobuf,com_github_grpc_grpc,jsoncpp_git,libjpeg_turbo,nasm,png,highwayhash \
-		--override_repository=bazel_skylib=$(CURDIR)/debian/mock_repos/bazel_skylib \
-		--override_repository=rules_cc=$(CURDIR)/debian/mock_repos/rules_cc \
-		--override_repository=rules_java=$(CURDIR)/debian/mock_repos/rules_java \
-		//tensorflow:tensorflow_framework
-	#generate pkgconfig files
-	for libname in tensorflow_cc tensorflow_framework; \
-	do \
-		sed -r -e 's/^(Version: ).*$$/\1$(DEB_VERSION_UPSTREAM)/' debian/lib$${libname}.pc.in > debian/lib$${libname}.pc; \
-		sed -i -e 's:@PREFIX@:$(PREFIX):' debian/lib$${libname}.pc; \
-		sed -i -e 's:@LIB_PATH@:$(LIB_PATH):' debian/lib$${libname}.pc; \
-	done
-
-
-override_dh_install:
-	# install pkgconfig files
-	mkdir -p debian/tmp/usr/$(LIB_PATH)/pkgconfig/
-	mv debian/libtensorflow_cc.pc debian/tmp/usr/$(LIB_PATH)/pkgconfig/
-	mv debian/libtensorflow_framework.pc debian/tmp/usr/$(LIB_PATH)/pkgconfig/
-	# get rid of spurious .params files
-	dh_install
-	rm -f debian/libtensorflow-*/usr/lib/$(DEB_HOST_MULTIARCH)/*.params
-	chrpath -d debian/libtensorflow-framework2/usr/lib/$(DEB_HOST_MULTIARCH)/*.so.*
-	chrpath -d debian/libtensorflow-cc2/usr/lib/$(DEB_HOST_MULTIARCH)/*.so.*
-	# make missing .so links until we can persuade the build to do it
-	dh_link -p libtensorflow-cc2 usr/lib/$(DEB_HOST_MULTIARCH)/libtensorflow_cc.so.2.3.1 usr/lib/$(DEB_HOST_MULTIARCH)/libtensorflow_cc.so.2
-	dh_link -p libtensorflow-dev usr/lib/$(DEB_HOST_MULTIARCH)/libtensorflow_cc.so.2.3.1 usr/lib/$(DEB_HOST_MULTIARCH)/libtensorflow_cc.so
-	rsync -av --include=*/ --include=*.h --exclude=* --prune-empty-dirs --chmod=F644 --mkpath bazel-out/k8-opt/bin/tensorflow/  debian/libtensorflow-dev/usr/include/tensorflow
-
-#nobble the tests for now
-DEB_BUILD_OPTIONS += nocheck
-override_dh_auto_test:
-ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
-	bazel test \
-		-k \
-		--verbose_failures \
-		--repository_cache= \
-		--config=opt \
-		--distdir=./debian/dist \
-		--repo_env=TF_SYSTEM_LIBS=nsync,curl,double_conversion,snappy,gif,zlib,com_google_protobuf,com_github_grpc_grpc,jsoncpp_git,libjpeg_turbo,nasm \
-		--override_repository=bazel_skylib=$(CURDIR)/debian/mock_repos/bazel_skylib \
-		--override_repository=rules_cc=$(CURDIR)/debian/mock_repos/rules_cc \
-		--override_repository=rules_java=$(CURDIR)/debian/mock_repos/rules_java \
-		//tensorflow/cc/...
-endif
-
-#dwz needs extra debug space
-override_dh_dwz:
-	dh_dwz -- -L none
-
-override_dh_clean:
-	bazel clean --expunge
-	rm -rf /tmp/.cache/bazel
-	dh_clean
+		dh_auto_configure -- \
+		-Wno-dev \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_SHARED_LIBS=ON \
+		-DGEMMLOWP_SOURCE_DIR=/usr/include/gemmlowp \
+		-DML_DTYPES_SOURCE_DIR=/usr/include/ml_dtypes \
+		-DTFLITE_ENABLE_INSTALL=ON \
+		-DCMAKE_FIND_PACKAGE_PREFER_CONFIG=ON \
+		-DSYSTEM_FARMHASH=ON \
+		-Dabsl_DIR=/usr/lib/$(DEB_HOST_MULTIARCH)/cmake/absl/ \
+		-DEigen3_DIR=/usr/share/eigen3/cmake/ \
+		-DFlatBuffers_DIR=/usr/lib/$(DEB_HOST_MULTIARCH)/cmake/flatbuffers/ \
+		-Dcpuinfo_DIR=/usr/lib/$(DEB_HOST_MULTIARCH)/cmake/cpuinfo/ \
+		-DNEON_2_SSE_DIR=/usr/lib/cmake/NEON_2_SSE/ \
+		-DSYSTEM_PTHREADPOOL=ON \
+		-DTFLITE_ENABLE_NNAPI=OFF \
+		-DTFLITE_ENABLE_XNNPACK=OFF \
+		-DTFLITE_ENABLE_GPU=OFF \
+		-DTFLITE_ENABLE_RESOURCE=ON \
+		-DTFLITE_ENABLE_RUY=ON \
+		$(NULL)

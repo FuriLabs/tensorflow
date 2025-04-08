@@ -1,6 +1,0 @@
-debian/build
-.cache/
-.tf_configure.bazelrc
-tools/python_bin_path.sh
-external/
-~/.bazel-*
