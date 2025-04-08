@@ -67,10 +67,12 @@ from tensorflow.python.tpu import training_loop
 from tensorflow.python.tpu.ops import tpu_ops
 from tensorflow.python.util import deprecation
 from tensorflow.python.util import nest
-from tensorflow.python.util import tf_export
 from tensorflow.python.util import tf_inspect
+from tensorflow.python.util.tf_export import tf_export
+
 
 _XLA_OP_BY_OP_INPUTS_LIMIT = 200
+
 
 _EXPERIMENTAL_TPU_BATCH_VARIABLE_INITIALIZATION = False
 
@@ -239,7 +241,7 @@ def _maybe_partial_apply_variables(fn, args, kwargs):
   return fn, args, kwargs
 
 
-@tf_export.tf_export("distribute.TPUStrategy", v1=[])
+@tf_export("distribute.TPUStrategy", v1=[])
 class TPUStrategyV2(distribute_lib.Strategy):
   """Synchronous training on TPUs and TPU Pods.
 
@@ -363,7 +365,7 @@ class TPUStrategyV2(distribute_lib.Strategy):
         `tf.distribute.TPUStrategy.experimental_assign_to_logical_device` will
         result in a ValueError.
     """
-    super().__init__(
+    super(TPUStrategyV2, self).__init__(
         TPUExtended(
             self,
             tpu_cluster_resolver,
@@ -664,7 +666,7 @@ class TPUStrategyV2(distribute_lib.Strategy):
     return xla_sharding.replicate(tensor, use_sharding_op=True)
 
 
-@tf_export.tf_export("distribute.experimental.TPUStrategy", v1=[])
+@tf_export("distribute.experimental.TPUStrategy", v1=[])
 @deprecation.deprecated_endpoints("distribute.experimental.TPUStrategy")
 class TPUStrategy(distribute_lib.Strategy):
   """Synchronous training on TPUs and TPU Pods.
@@ -705,7 +707,7 @@ class TPUStrategy(distribute_lib.Strategy):
         "`tf.distribute.experimental.TPUStrategy` is deprecated, please use "
         "the non-experimental symbol `tf.distribute.TPUStrategy` instead.")
 
-    super().__init__(
+    super(TPUStrategy, self).__init__(
         TPUExtended(
             self,
             tpu_cluster_resolver,
@@ -751,7 +753,7 @@ class TPUStrategy(distribute_lib.Strategy):
     return self.extended._tpu_cluster_resolver  # pylint: disable=protected-access
 
 
-@tf_export.tf_export(v1=["distribute.experimental.TPUStrategy"])
+@tf_export(v1=["distribute.experimental.TPUStrategy"])
 class TPUStrategyV1(distribute_lib.StrategyV1):
   """TPU distribution strategy implementation."""
 
@@ -773,7 +775,7 @@ class TPUStrategyV1(distribute_lib.StrategyV1):
           specify the placement of replicas on the TPU cluster. Currently only
           supports the usecase of using a single core within a TPU cluster.
     """
-    super().__init__(TPUExtended(
+    super(TPUStrategyV1, self).__init__(TPUExtended(
         self, tpu_cluster_resolver, steps_per_run, device_assignment))
     distribute_lib.distribution_strategy_gauge.get_cell("V1").set("TPUStrategy")
     distribute_lib.distribution_strategy_replica_gauge.get_cell(
@@ -866,7 +868,7 @@ class TPUExtended(distribute_lib.StrategyExtendedV1):
       use_spmd_for_xla_partitioning=False,
       enable_data_reorder=False,
   ):
-    super().__init__(container_strategy)
+    super(TPUExtended, self).__init__(container_strategy)
 
     if tpu_cluster_resolver is None:
       tpu_cluster_resolver = tpu_cluster_resolver_lib.TPUClusterResolver("")
@@ -1379,7 +1381,6 @@ class TPUExtended(distribute_lib.StrategyExtendedV1):
         return _create_mirrored_tpu_variables(**kwargs)
 
       value_list = []
-      initial_value = None
 
       for i, d in enumerate(devices):
         with ops.device(d):
@@ -1394,7 +1395,6 @@ class TPUExtended(distribute_lib.StrategyExtendedV1):
                 initial_value = ops.convert_to_tensor(
                     initial_value, dtype=kwargs.get("dtype", None)
                 )
-
           if i > 0:
             # Give replicas meaningful distinct names:
             var0name = value_list[0].name.split(":")[0]

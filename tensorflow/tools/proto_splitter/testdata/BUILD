@@ -1,4 +1,3 @@
-# Placeholder: load py_proto_library
 load("//tensorflow:strict.default.bzl", "py_strict_binary")
 load(
     "//tensorflow/core/platform:build_config.bzl",

@@ -127,8 +127,7 @@ class CudaSparseHandles {
   cudaStream_t stream_;
   cusparseHandle_t cusparse_handle_;
 
-  CudaSparseHandles(const CudaSparseHandles&) = delete;
-  void operator=(const CudaSparseHandles&) = delete;
+  TF_DISALLOW_COPY_AND_ASSIGN(CudaSparseHandles);
 };
 
 // TODO(ebrevdo): Replace global mutex guarding CudaSparseHandles

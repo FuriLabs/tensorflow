@@ -1,4 +1,3 @@
-# Placeholder: load py_proto_library
 load("//tensorflow/core/platform:build_config.bzl", "tf_proto_library")
 load("//tensorflow:tensorflow.default.bzl", "cuda_py_strict_test", "tf_py_strict_test")
 load("//tensorflow/core/platform:distribute.bzl", "distribute_py_strict_test")
@@ -483,7 +482,6 @@ py_strict_library(
     srcs = ["session_manager.py"],
     srcs_version = "PY3",
     deps = [
-        ":saver",
         "//tensorflow/python/checkpoint:checkpoint_lib",
         "//tensorflow/python/client:session",
         "//tensorflow/python/distribute:distribute_lib",
@@ -1426,12 +1424,12 @@ cuda_py_strict_test(
     python_version = "PY3",
     deps = [
         ":slot_creator",
+        "//tensorflow/compiler/xla:xla_data_proto_py",
         "//tensorflow/python/compiler/xla/experimental:xla_sharding",
         "//tensorflow/python/framework:constant_op",
         "//tensorflow/python/framework:dtypes",
         "//tensorflow/python/framework:ops",
         "//tensorflow/python/ops:variable_v1",
-        "@local_xla//xla:xla_data_proto_py",
     ] + TRAINING_TEST_DEPS,
 )
 

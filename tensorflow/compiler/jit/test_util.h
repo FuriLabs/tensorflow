@@ -20,7 +20,6 @@ limitations under the License.
 
 #include <map>
 #include <memory>
-#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -70,9 +69,7 @@ struct GraphOptimizationPassWrapper {
 // Helps set up devices for unit tests.
 class DeviceSetup {
  public:
-  void AddDevicesAndSetUp(
-      const std::vector<std::string>& device_names,
-      const std::optional<FunctionDef>& fdef = std::nullopt);
+  void AddDevicesAndSetUp(const std::vector<std::string>& device_names);
   Device* GetDevice(const string& device_name);
   FunctionLibraryRuntime* flr() { return flr_; }
 

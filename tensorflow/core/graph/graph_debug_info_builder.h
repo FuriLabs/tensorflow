@@ -28,7 +28,7 @@ limitations under the License.
 #include "absl/types/span.h"
 #include "tensorflow/core/framework/graph_debug_info.pb.h"
 #include "tensorflow/core/platform/stack_frame.h"
-#include "tsl/platform/macros.h"
+#include "tensorflow/tsl/platform/macros.h"
 
 namespace tensorflow {
 
@@ -197,8 +197,7 @@ class GraphDebugInfoBuilder {
   absl::flat_hash_map<StackFrame, int> frame_to_index_;
   int new_name_index_ = 0;
 
-  GraphDebugInfoBuilder(const GraphDebugInfoBuilder&) = delete;
-  void operator=(const GraphDebugInfoBuilder&) = delete;
+  TF_DISALLOW_COPY_AND_ASSIGN(GraphDebugInfoBuilder);
 };
 
 }  // namespace tensorflow

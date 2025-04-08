@@ -12,10 +12,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
+
 #include "tensorflow/compiler/mlir/lite/transforms/lift_tflite_flex_ops.h"
 
-#include <cstddef>
-#include <cstdint>
 #include <string>
 #include <utility>
 
@@ -211,15 +210,11 @@ class LiftFlexCustomOp : public OpRewritePattern<TFL::CustomOp> {
       tensorflow::NodeDef& node_def) {
     // The flexbuffer contains a vector where the first elements is the
     // op name and the second is a serialized NodeDef.
-    const uint8_t* const opt_data =
-        reinterpret_cast<const uint8_t*>(custom_options.data());
-    const size_t opt_size = custom_options.size();
-    if (!flexbuffers::VerifyBuffer(opt_data, opt_size)) {
-      return emitError(loc, "invalid custom options");
-    }
-
     const flexbuffers::Vector& v =
-        flexbuffers::GetRoot(opt_data, opt_size).AsVector();
+        flexbuffers::GetRoot(
+            reinterpret_cast<const uint8_t*>(custom_options.data()),
+            custom_options.size())
+            .AsVector();
 
     op_name = v[0].AsString().str();
 

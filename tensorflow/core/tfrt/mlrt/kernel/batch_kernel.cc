@@ -47,7 +47,6 @@ struct BatchFunctionOp : mlrt::KernelFrame {
   using KernelFrame::KernelFrame;
 
   static constexpr char kName[] = "tf_mlrt.batch_function";
-  static constexpr bool kUseCustomDevice = false;
 
   mlrt::RegisterValueSpan<tfrt_stub::FallbackTensor> args() const {
     return arguments();
@@ -309,8 +308,10 @@ void MlrtBatchResource::ProcessFuncBatchImpl(
   const auto& caller_fallback_request_state =
       caller_tf_context.fallback_request_state();
 
-  // Connect to the batch step id propagated from batch task.
-  int64_t step_id = caller_fallback_request_state.step_id();
+  // Using the same logic as in the c'tor of FunctionLibraryRuntime::Options,
+  // to avoid clash with any Session-generated step ID. DirectSession and
+  // MasterSession generates non-negative step IDs.
+  int64_t step_id = -std::abs(static_cast<int64_t>(random::New64()));
 
   // Copy per-request states to create a new KernelFallbackCompatRequestState.
   //

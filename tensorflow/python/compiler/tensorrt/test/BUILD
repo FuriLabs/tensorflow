@@ -221,8 +221,7 @@ cuda_py_strict_test(
     name = "binary_tensor_weight_broadcast_test",
     srcs = ["binary_tensor_weight_broadcast_test.py"],
     python_version = "PY3",
-    # TODO(b/297490791): Reenable after TensorRT regression has been fixed
-    tags = base_tags + ["no_oss"],
+    tags = base_tags,
     xla_enable_strict_auto_jit = False,
     deps = [
         ":tf_trt_integration_test_base_srcs",

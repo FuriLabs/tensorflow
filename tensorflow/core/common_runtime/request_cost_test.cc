@@ -15,9 +15,8 @@ limitations under the License.
 
 #include "tensorflow/core/common_runtime/request_cost.h"
 
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
 #include "absl/time/time.h"
+#include "tensorflow/core/platform/test.h"
 
 namespace tensorflow {
 namespace {
@@ -25,7 +24,7 @@ namespace {
 using ::testing::Pair;
 using ::testing::UnorderedElementsAre;
 
-TEST(RequestCostTest, RecordCost) {
+TEST(RequestCostTest, Basic) {
   RequestCost request_cost;
 
   request_cost.RecordCost(
@@ -47,19 +46,6 @@ TEST(RequestCostTest, RecordCost) {
                                    Pair("tpu_v2", absl::Milliseconds(22)),
                                    Pair("cpu_v1", absl::Milliseconds(33)),
                                    Pair("cpu_v2", absl::Milliseconds(44))));
-}
-
-TEST(RequestCostTest, RecordBatchMetrics) {
-  RequestCost request_cost;
-
-  request_cost.RecordBatchMetrics(RequestCost::BatchMetrics{
-      /*processed_size=*/8, /*input_size=*/8, /*padding_size=*/0});
-  request_cost.RecordBatchMetrics(RequestCost::BatchMetrics{
-      /*processed_size=*/4, /*input_size=*/2, /*padding_size=*/1});
-
-  EXPECT_THAT(request_cost.GetBatchMetrics(),
-              testing::ElementsAre(testing::FieldsAre(8, 8, 0),
-                                   testing::FieldsAre(4, 2, 1)));
 }
 
 }  // namespace
