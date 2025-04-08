@@ -79,8 +79,7 @@ limitations under the License.
 #include "tensorflow/core/profiler/lib/traceme.h"
 #include "tensorflow/core/protobuf/error_codes.pb.h"
 #include "tensorflow/core/util/device_name_utils.h"
-#include "tsl/platform/fingerprint.h"
-#include "tsl/platform/statusor.h"
+#include "tensorflow/tsl/platform/fingerprint.h"
 #if !defined(IS_MOBILE_PLATFORM)
 #include "tensorflow/core/distributed_runtime/eager/eager_client.h"
 #include "tensorflow/core/distributed_runtime/eager/remote_copy_node.h"
@@ -1064,13 +1063,11 @@ bool IntArgsAndRetvalsOnDevice(EagerOperation* op,
 
 using BoolTensorInputs = std::vector<std::pair<std::string, bool>>;
 
-// Identifies boolean tensor inputs from the EagerOperation and returns them. If
-// delete_inputs is set to true then it will also delete them from the
-// function's input signature. Currently this is only useful to invoke when
-// small_constants_optimizer is enabled because the runtime will have equivalent
-// FunctionDefs of the original tf.function without the boolean tensor input.
-StatusOr<BoolTensorInputs> GetBoolInputs(EagerOperation* op,
-                                         bool delete_inputs) {
+// Removes boolean tensor inputs from the EagerOperation and returns them.
+// Currently this is only useful to invoke when small_constants_optimizer is
+// enabled because the runtime will have equivalent FunctionDefs of the original
+// tf.function without the boolean tensor input.
+StatusOr<BoolTensorInputs> RemoveBoolInputs(EagerOperation* op) {
   BoolTensorInputs result;
   if (!op->is_function()) return result;
   // Extract tensor inputs.
@@ -1111,7 +1108,6 @@ StatusOr<BoolTensorInputs> GetBoolInputs(EagerOperation* op,
     result.emplace_back(input_arg.name(), input_value);
   }
 
-  if (!delete_inputs) return result;
   // If we were able to identify all boolean inputs, update the op's inputs.
   op->Clear();
   for (auto* input : stripped_inputs) {
@@ -1331,8 +1327,7 @@ Status GetOrCreateKernelAndDevice(
   // Update the EagerOperation with information about the boolean input tensors
   // when small constant optimization is enabled.
   if (IsSmallConstantOptimizationEnabled(*op)) {
-    TF_ASSIGN_OR_RETURN(BoolTensorInputs bool_inputs,
-                        GetBoolInputs(op, /*delete_inputs=*/false));
+    TF_ASSIGN_OR_RETURN(BoolTensorInputs bool_inputs, RemoveBoolInputs(op));
     string folded_name = op->Name();
     for (const auto& [input_name, input_value] : bool_inputs) {
       folded_name = small_constants_optimizer::FoldedFunctionName(
@@ -1540,29 +1535,20 @@ Status GetOrCreateKernelAndDevice(
     TF_RETURN_IF_ERROR(
         kernel->Init(ctx.LogDevicePlacement(), ndef, graph_collector));
 
-    // Exclude tf.data op kernels from being cached. The reason for this is
-    // that tf.data op kernels that accept a user-defined function will have a
-    // unique cache key every time they are executed (because the user-defined
-    // function is traced every time). Caching such kernels provides no
-    // benefit and in some cases results in linear memory growth of use
-    // programs that build input pipeline graphs in a loop.
-    const OpDef* op_def;
     if (op->is_function()) {
-      const FunctionDef* function_def =
-          op->EagerContext().FuncLibDef()->Find(op->Name());
-      if (function_def != nullptr) {
-        op_def = &(function_def->signature());
-      } else {
-        TF_RETURN_IF_ERROR(OpDefForOp(op->Name().c_str(), &op_def));
-      }
-    } else {
-      TF_RETURN_IF_ERROR(OpDefForOp(op->Name().data(), &op_def));
-    }
-    if (op_def != nullptr && KernelCacheEnabled(*op_def)) {
-      // TODO(intel-tf): Implement an eviction policy to prevent potential
-      // memory growth (https://github.com/tensorflow/tensorflow/issues/58676)
-      VLOG(2) << "Caching op " << op->Name();
       ctx.AddKernelToCache(cache_key, kernel.get());
+    } else {
+      // Exclude tf.data op kernels from being cached. The reason for this is
+      // that tf.data op kernels that accept a user-defined function will have a
+      // unique cache key every time they are executed (because the user-defined
+      // function is traced every time). Caching such kernels provides no
+      // benefit and in some cases results in linear memory growth of use
+      // programs that build input pipeline graphs in a loop.
+      const OpDef* op_def;
+      TF_RETURN_IF_ERROR(OpDefForOp(op->Name().data(), &op_def));
+      if (KernelCacheEnabled(*op_def)) {
+        ctx.AddKernelToCache(cache_key, kernel.get());
+      }
     }
   }
 

@@ -6,9 +6,7 @@ See https://github.com/bazelbuild/rules_python/ for more details.
 
 #### Hermetic Python toolchain details
 
-By default, Python 3.9 is used.
-
-To set your own version for hermetic Python toolchain, use `TF_PYTHON_VERSION`
+To set a version for hermetic Python toolchain, use `TF_PYTHON_VERSION`
 environment variable, e.g.
 
 ```
@@ -28,16 +26,7 @@ updating requirements for multiple versions of Python.
 
 #### How to update/add requirements
 
-By default, the name of the input requirements file is `requirements.in`,
-but it can be set using the `REQUIREMENTS_FILE_NAME` variable, for example:
-```
-export REQUIREMENTS_FILE_NAME=`my_requirements.in`
-```
-
-To set a version from the argument line, add to your command
-```
---repo_env=REQUIREMENTS_FILE_NAME=`my_requirements.in`
-```
+Add or update requirements in `requirements.in` file, then run the updater.
 
 #### How to run the updater
 

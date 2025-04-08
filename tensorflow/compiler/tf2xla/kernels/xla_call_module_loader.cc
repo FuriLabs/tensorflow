@@ -43,7 +43,6 @@ limitations under the License.
 #include "mlir/Parser/Parser.h"  // from @llvm-project
 #include "mlir/Pass/PassManager.h"  // from @llvm-project
 #include "mlir/Support/DebugStringHelper.h"  // from @llvm-project
-#include "mlir/Support/LLVM.h"  // from @llvm-project
 #include "mlir/Support/LogicalResult.h"  // from @llvm-project
 #include "mlir/Transforms/Passes.h"  // from @llvm-project
 #include "stablehlo/dialect/ChloOps.h"  // from @stablehlo
@@ -54,16 +53,15 @@ limitations under the License.
 #include "tensorflow/compiler/jit/flags.h"
 #include "tensorflow/compiler/mlir/tensorflow/utils/dump_mlir_util.h"
 #include "tensorflow/compiler/mlir/tensorflow/utils/error_util.h"
-#include "xla/client/xla_computation.h"
-#include "xla/mlir_hlo/mhlo/IR/hlo_ops.h"
-#include "xla/mlir_hlo/mhlo/transforms/passes.h"
-#include "xla/python/refine_polymorphic_shapes.h"
-#include "xla/translate/hlo_to_mhlo/hlo_utils.h"
-#include "xla/translate/mhlo_to_hlo/mlir_hlo_to_hlo.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/regexp.h"
-#include "tsl/platform/status.h"
-#include "tsl/platform/statusor.h"
+#include "tensorflow/compiler/xla/client/xla_computation.h"
+#include "tensorflow/compiler/xla/mlir_hlo/mhlo/IR/hlo_ops.h"
+#include "tensorflow/compiler/xla/mlir_hlo/mhlo/transforms/passes.h"
+#include "tensorflow/compiler/xla/python/refine_polymorphic_shapes.h"
+#include "tensorflow/compiler/xla/translate/hlo_to_mhlo/hlo_utils.h"
+#include "tensorflow/compiler/xla/translate/mhlo_to_hlo/mlir_hlo_to_hlo.h"
+#include "tensorflow/tsl/platform/errors.h"
+#include "tensorflow/tsl/platform/regexp.h"
+#include "tensorflow/tsl/platform/statusor.h"
 
 namespace tensorflow {
 
@@ -149,39 +147,6 @@ tsl::StatusOr<mlir::Value> ComputeDimensionValue(
   return val;
 }
 
-// For a module whose "main" takes a first platform_index argument, sets
-// the argument to a constant value, and erases the argument.
-tsl::Status SetPlatformIndex(mlir::func::FuncOp main, int platform_index) {
-  mlir::Block &main_body = main.front();
-
-  if (main.getNumArguments() < 1) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "The module should have a platform index argument but it has no ",
-        "arguments"));
-  }
-  mlir::OpBuilder op_builder(main);
-  op_builder.setInsertionPointToStart(&main_body);
-  mlir::BlockArgument platform_index_arg = main_body.getArgument(0);
-  mlir::RankedTensorType arg_ranked_type =
-      platform_index_arg.getType().dyn_cast<mlir::RankedTensorType>();
-  if (!arg_ranked_type || arg_ranked_type.getRank() != 0 ||
-      !arg_ranked_type.getElementType().isSignlessInteger(32)) {
-    return absl::InvalidArgumentError(
-        absl::StrCat("Module argument at index 0 should be a 0-dimensional "
-                     "32-bit integer-tensor platform index argument but "
-                     "has type ",
-                     mlir::debugString(platform_index_arg.getType())));
-  }
-  auto platform_index_op = op_builder.create<mlir::stablehlo::ConstantOp>(
-      platform_index_arg.getLoc(),
-      op_builder.getI32IntegerAttr(platform_index));
-  platform_index_arg.replaceAllUsesWith(platform_index_op);
-
-  main.eraseArgument(0);
-
-  return tsl::OkStatus();
-}
-
 }  // namespace
 
 tsl::StatusOr<std::unique_ptr<XlaCallModuleLoader>> XlaCallModuleLoader::Create(
@@ -199,7 +164,6 @@ tsl::StatusOr<std::unique_ptr<XlaCallModuleLoader>> XlaCallModuleLoader::Create(
   return loader;
 }
 
-// TODO(b/283439649): DEPRECATED, to be removed.
 // Adds a wrapper for the "main" function to compute the platform index and the
 // dimension arguments.
 //
@@ -411,28 +375,40 @@ tsl::Status XlaCallModuleLoader::RefineDynamicShapes(
     }
   }
 
-  // Refine 'main' argument types to use static input types instead. The main
-  // arguments may occur as return values, or as inputs to called functions,
-  // and changing their types may invalidate the module. To prevent this
-  // we insert dummy conversion ops as the sole uses of the main arguments.
-  // If we use stablehlo.convert, we end up with "convert 3xf32 -> *xf32"
-  // after we set the static shapes for the main arguments. The "convert"
-  // op does not support unranked result for ranked inputs. So, we use
-  // "bitcast_convert", which is more flexible in the relationship between
-  // the input and the result.
-  mlir::OpBuilder op_builder(module_->getBodyRegion());
-  op_builder.setInsertionPointToStart(&main_body);
-  for (auto i = 0; i < main_body.getNumArguments(); ++i) {
-    mlir::BlockArgument arg = main_body.getArgument(i);
-    auto convert_op = op_builder.create<mlir::stablehlo::BitcastConvertOp>(
-        arg.getLoc(), arg.getType(), arg);
-    arg.replaceAllUsesExcept(convert_op, convert_op);
+  // Refine 'main' argument types to use static input types instead.
+  // This will only change the argument types and will not propagate the
+  // additional type information further. For that, we'll need to run
+  // shape refinement as explained below.
+  // Before refining the argument types it is useful to run the inliner to
+  // remove calls that may be called with the input arguments.
+  {
+    mlir::StatusScopedDiagnosticHandler diag_handler(module_->getContext());
+
+    mlir::PassManager pm_inline(module_->getContext());
+    applyTensorflowAndCLOptions(pm_inline);
+    pm_inline.addPass(mlir::createInlinerPass());
+
+    if (mlir::failed(pm_inline.run(*module_))) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "Module inlining failed: ", diag_handler.ConsumeStatus().ToString()));
+    }
   }
 
   auto static_array_output_types = llvm::to_vector(main_.getResultTypes());
   for (auto i = 0; i < main_body.getNumArguments(); ++i) {
     auto arg = main_body.getArgument(i);
     arg.setType(static_array_input_types[i]);
+    // If the argument is used by `func.return`, then we also need to
+    // update the function result types. It's not great that we need this hack,
+    // but in the future when we have stablehlo.func, stablehlo.return, etc,
+    // this will not be needed.
+    // TODO(burmako): Once https://github.com/openxla/stablehlo/issues/425 is
+    // fixed, clean this up.
+    for (mlir::OpOperand &use : arg.getUses()) {
+      if (auto ret = llvm::dyn_cast<mlir::func::ReturnOp>(use.getOwner())) {
+        static_array_output_types[use.getOperandNumber()] = arg.getType();
+      }
+    }
   }
   main_.setType(builder.getFunctionType(static_array_input_types,
                                         static_array_output_types));
@@ -495,7 +471,6 @@ tsl::Status XlaCallModuleLoader::LoadAndPreprocessModule(
   VLOG(3) << "Parsed serialized module (version = " << version
           << ", platforms = [" << absl::StrJoin(platforms, ", ")
           << "], loading_platform = " << loading_platform
-          << ", main_has_token_input_output = " << main_has_token_input_output
           << ", dim_args_spec = [" << absl::StrJoin(dim_args_spec_, ", ")
           << "], disabled_checks = [" << absl::StrJoin(disabled_checks, ", ")
           << "], loading_disabled_checks = ["
@@ -554,26 +529,19 @@ tsl::Status XlaCallModuleLoader::LoadAndPreprocessModule(
     return absl::InvalidArgumentError("Cannot find 'main' in module");
   }
 
-  if (!dim_args_spec_.empty()) {
-    // TODO(b/283439649): to be removed.
+  if (!dim_args_spec_.empty() || platform_index_ >= 0) {
     TF_RETURN_IF_ERROR(AddMainWrapper());
     main_ = module_->lookupSymbol<mlir::func::FuncOp>("main");
   }
 
-  if (platforms.size() > 1) {
-    VLOG(3) << "XlaCallModule setting the platform_index to "
-            << platform_index_;
-    TF_RETURN_IF_ERROR(SetPlatformIndex(main_, platform_index_));
-  }
-
   mlir::Block &main_body = main_.front();
-  int nr_token_arguments = main_has_token_input_output ? 1 : 0;
   int nr_platform_args = (platform_index_ >= 0 ? 1 : 0);
   int nr_dim_args = dim_args_spec_.size();
+  int nr_token_arguments = main_has_token_input_output ? 1 : 0;
   if (num_invocation_args != main_body.getNumArguments() - nr_token_arguments) {
     return absl::InvalidArgumentError(absl::StrCat(
-        "Incorrect number of arguments passed to XlaCallModule = ",
-        num_invocation_args, ". The module main function takes ",
+        "Incorrect number of arguments passed to XlaCallModule: ",
+        num_invocation_args, ". The module takes ",
         main_body.getNumArguments() + nr_platform_args + nr_dim_args +
             nr_token_arguments,
         " arguments of which ", nr_platform_args, " platform index arguments, ",
@@ -617,6 +585,8 @@ absl::Status XlaCallModuleLoader::LowerModuleToMhlo() {
   mlir::PassManager pm(module_->getContext());
   applyTensorflowAndCLOptions(pm);
   pm.addPass(mlir::mhlo::createStablehloLegalizeToHloPass());
+  pm.addNestedPass<mlir::func::FuncOp>(
+      mlir::mhlo::createLegalizeSparseChloToLinalgPass());
   pm.addNestedPass<mlir::func::FuncOp>(mlir::mhlo::createChloLegalizeToHloPass(
       /*legalizeBroadcasts=*/true, /*expandCompositions=*/true));
   pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());

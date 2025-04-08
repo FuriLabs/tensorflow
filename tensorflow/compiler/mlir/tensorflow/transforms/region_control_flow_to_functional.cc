@@ -135,7 +135,7 @@ StringRef ExtractSingleBlockRegion(
     SymbolTableCollection& symbol_table, Region& region, StringRef name,
     llvm::SmallVectorImpl<Value>& extern_values,
     llvm::SmallVectorImpl<func::FuncOp>& worklist,
-    bool extern_values_passthrough, bool only_one_return_value) {
+    bool extern_values_passthrough) {
   ModuleOp module = region.getParentOfType<ModuleOp>();
   auto builder = OpBuilder::atBlockBegin(module.getBody());
   auto loc = region.getParentOp()->getLoc();
@@ -153,9 +153,6 @@ StringRef ExtractSingleBlockRegion(
   auto return_types = llvm::to_vector<4>(terminator->getOperandTypes());
   if (extern_values_passthrough)
     for (auto input : extern_values) return_types.push_back(input.getType());
-  if (only_one_return_value) {
-    return_types.resize(1);
-  }
 
   auto type = FunctionType::get(region.getContext(), input_types, return_types);
 
@@ -174,9 +171,6 @@ StringRef ExtractSingleBlockRegion(
   // Function return values are all the terminator operands + pass through
   // extern values (if enabled).
   auto return_values = llvm::to_vector<4>(terminator->getOperands());
-  if (only_one_return_value) {
-    return_values.resize(1);
-  }
   if (extern_values_passthrough)
     return_values.insert(return_values.end(),
                          first_block.args_begin() + num_region_arguments,
@@ -360,8 +354,7 @@ LogicalResult RegionControlFlowToFunctional::ConvertIfOp(
     }
     then_name = ExtractSingleBlockRegion(
         symbol_table, if_region.getThenBranch(), then_name, extern_values,
-        worklist, /*extern_values_passthrough=*/false,
-        /*only_one_return_value=*/false);
+        worklist, /*extern_values_passthrough=*/false);
 
     if (if_region->hasAttrOfType<StringAttr>(kElseFuncNameAttr) &&
         !if_region.get_elseFuncNameAttr().getValue().empty()) {
@@ -373,8 +366,7 @@ LogicalResult RegionControlFlowToFunctional::ConvertIfOp(
     }
     else_name = ExtractSingleBlockRegion(
         symbol_table, if_region.getElseBranch(), else_name, extern_values,
-        worklist, /*extern_values_passthrough=*/false,
-        /*only_one_return_value=*/false);
+        worklist, /*extern_values_passthrough=*/false);
   }
 
   // Look through ToBool operations for the condition.
@@ -415,8 +407,7 @@ LogicalResult RegionControlFlowToFunctional::ConvertCaseOp(
         GetName(case_region, llvm::formatv("_branch{0}", item.index()).str());
     branch_name = ExtractSingleBlockRegion(symbol_table, *item.value(),
                                            branch_name, extern_values, worklist,
-                                           /*extern_values_passthrough=*/false,
-                                           /*only_one_return_value=*/false);
+                                           /*extern_values_passthrough=*/false);
     branch_symbols.push_back(
         SymbolRefAttr::get(case_region.getContext(), branch_name));
   }
@@ -490,14 +481,12 @@ LogicalResult RegionControlFlowToFunctional::ConvertWhileOp(
     cond_name = GetName(while_region, "_cond");
     cond_name = ExtractSingleBlockRegion(symbol_table, while_region.getCond(),
                                          cond_name, extern_values, worklist,
-                                         /*extern_values_passthrough=*/false,
-                                         /*only_one_return_value=*/true);
+                                         /*extern_values_passthrough=*/false);
 
     body_name = GetName(while_region, "_body");
     body_name = ExtractSingleBlockRegion(symbol_table, while_region.getBody(),
                                          body_name, extern_values, worklist,
-                                         /*extern_values_passthrough=*/true,
-                                         /*only_one_return_value=*/false);
+                                         /*extern_values_passthrough=*/true);
 
     // All extern values become additional inputs and additional output types
     // for the functional while.

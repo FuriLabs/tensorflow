@@ -29,8 +29,7 @@ PYBIND11_MODULE(_pywrap_saved_model_aot_compile, m) {
       .def(py::init<>());
   m.doc() = "pybind11 AotOptions Python - C++ Wrapper";
 
-  m.def("AotCompileSavedModel",
-        &tensorflow::tfrt_stub::AotCompileSavedModelAndSaveResult,
+  m.def("AotCompileSavedModel", &tensorflow::tfrt_stub::AotCompileSavedModel,
         py::arg("input_model_dir") = absl::string_view(),
         py::arg("aot_options") = tensorflow::tfrt_stub::AotOptions(),
         py::arg("output_model_dir") = absl::string_view());

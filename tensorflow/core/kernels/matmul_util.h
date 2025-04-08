@@ -15,25 +15,10 @@ limitations under the License.
 #include <optional>
 #include <vector>
 
-#if TENSORFLOW_USE_ROCM
-#include "rocm/rocm_config.h"
-#endif
-
-#if GOOGLE_CUDA || TF_HIPBLASLT
-
 #include "absl/container/flat_hash_map.h"
-#include "xla/stream_executor/device_memory.h"
+#include "tensorflow/compiler/xla/stream_executor/cuda/cuda_blas_lt.h"
+#include "tensorflow/compiler/xla/stream_executor/device_memory.h"
 #include "tensorflow/core/framework/types.h"
-#include "tsl/platform/types.h"
-
-#if GOOGLE_CUDA
-#include "xla/stream_executor/cuda/cuda_blas_lt.h"
-#endif
-
-#if TF_HIPBLASLT
-#include "xla/stream_executor/rocm/hip_blas_lt.h"
-#define CUDA_R_32F HIPBLAS_R_32F
-#endif
 
 namespace tensorflow {
 
@@ -55,7 +40,7 @@ struct BlasLtMatmulPlanParams {
   size_t batch_count = 1;
   bool broadcast_a = false;
   bool broadcast_b = false;
-  se::gpu::BlasLt::Epilogue epilogue = se::gpu::BlasLt::Epilogue::kDefault;
+  se::cuda::BlasLt::Epilogue epilogue = se::cuda::BlasLt::Epilogue::kDefault;
 };
 
 namespace internal {
@@ -74,8 +59,8 @@ H AbslHashValue(H h, const BlasLtMatmulPlanParams& params) {
 }
 
 struct PlanAndAlgorithms {
-  se::gpu::BlasLt::MatmulPlan plan;
-  std::vector<se::gpu::BlasLt::MatmulAlgorithm> algorithms;
+  se::cuda::BlasLt::MatmulPlan plan;
+  std::vector<se::cuda::BlasLt::MatmulAlgorithm> algorithms;
 };
 
 // Thread-safe map from matmul parameters to their corresponding plan and
@@ -86,9 +71,8 @@ class BlasLtMatmulPlanMap {
   const PlanAndAlgorithms* Insert(const BlasLtMatmulPlanParams& params,
                                   PlanAndAlgorithms value);
 
-  mutable absl::Mutex mu_;
-
  private:
+  mutable absl::Mutex mu_;
   absl::flat_hash_map<BlasLtMatmulPlanParams, PlanAndAlgorithms>
       params_plan_map_ ABSL_GUARDED_BY(mu_);
 };
@@ -97,19 +81,19 @@ StatusOr<se::blas::ComputationType> GetBlasComputationType(
     const DataType& dtype);
 
 StatusOr<const PlanAndAlgorithms*> GetPlanAndAlgorithms(
-    se::Stream* stream, const BlasLtMatmulPlanParams& params, absl::Mutex** pmu,
+    se::Stream* stream, const BlasLtMatmulPlanParams& params,
     std::optional<int> max_algorithm_count = std::nullopt);
 
 template <typename T>
 Status DoBlasLtMatmul(se::Stream* stream,
-                      const se::gpu::BlasLt::MatmulPlan& plan,
+                      const se::cuda::BlasLt::MatmulPlan& plan,
                       const se::DeviceMemory<T>& a,
                       const se::DeviceMemory<T>& b, se::DeviceMemory<T>& c,
-                      const se::gpu::BlasLt::MatmulAlgorithm& algorithm,
+                      const se::cuda::BlasLt::MatmulAlgorithm& algorithm,
                       se::ScratchAllocator& scratch_allocator,
                       const se::DeviceMemory<T>& bias = {},
                       se::blas::ProfileResult* profile_result = nullptr) {
-  se::gpu::BlasLt* blas_lt = se::gpu::GetBlasLt(stream);
+  se::cuda::BlasLt* blas_lt = se::cuda::GetBlasLt(stream);
   // TF_RET_CHECK(blas_lt != nullptr);
 
   se::DeviceMemory<T> aux{};  // We don't use the auxilary buffers.
@@ -131,7 +115,5 @@ Status DoBlasLtMatmul(se::Stream* stream,
 }
 
 }  // namespace tensorflow
-
-#endif
 
 #endif  // TENSORFLOW_CORE_KERNELS_MATMUL_UTIL_H_

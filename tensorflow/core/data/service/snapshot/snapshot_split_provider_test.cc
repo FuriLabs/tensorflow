@@ -20,9 +20,6 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
-#include "absl/time/time.h"
 #include "tensorflow/core/data/service/common.pb.h"
 #include "tensorflow/core/data/service/dispatcher_client.h"
 #include "tensorflow/core/data/service/snapshot/file_utils.h"
@@ -31,14 +28,15 @@ limitations under the License.
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/framework/tensor_testutil.h"
 #include "tensorflow/core/protobuf/snapshot.pb.h"
-#include "tsl/lib/core/status_test_util.h"
-#include "tsl/lib/io/compression.h"
-#include "tsl/platform/env.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/path.h"
-#include "tsl/platform/status_matchers.h"
-#include "tsl/platform/test.h"
-#include "tsl/protobuf/error_codes.pb.h"
+#include "tensorflow/tsl/lib/core/status_test_util.h"
+#include "tensorflow/tsl/lib/io/compression.h"
+#include "tensorflow/tsl/platform/env.h"
+#include "tensorflow/tsl/platform/errors.h"
+#include "tensorflow/tsl/platform/path.h"
+#include "tensorflow/tsl/platform/status.h"
+#include "tensorflow/tsl/platform/status_matchers.h"
+#include "tensorflow/tsl/platform/test.h"
+#include "tensorflow/tsl/protobuf/error_codes.pb.h"
 
 namespace tensorflow {
 namespace data {
@@ -59,7 +57,7 @@ class MockDispatcherClient : public DataServiceDispatcherClient {
       : DataServiceDispatcherClient(/*address=*/"localhost",
                                     /*protocol=*/"grpc") {}
 
-  MOCK_METHOD(absl::Status, GetSnapshotSplit,
+  MOCK_METHOD(Status, GetSnapshotSplit,
               (const std::string& worker_address, const std::string& base_path,
                int64_t stream_index, int64_t source_index,
                int64_t repetition_index, Tensor& split,
@@ -76,8 +74,7 @@ SnapshotTaskDef TestSnapshotTask() {
   return snapshot_task;
 }
 
-absl::Status WriteSplits(const SnapshotTaskDef& snapshot_task,
-                         int64_t num_splits) {
+Status WriteSplits(const SnapshotTaskDef& snapshot_task, int64_t num_splits) {
   std::string source_dir =
       RepetitionDirectory(snapshot_task.base_path(),
                           snapshot_task.stream_index(), /*source_index=*/0,
@@ -90,7 +87,7 @@ absl::Status WriteSplits(const SnapshotTaskDef& snapshot_task,
     TF_RETURN_IF_ERROR(AtomicallyWriteTFRecords(
         split_path, {split}, tsl::io::compression::kNone, Env::Default()));
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 TEST(SnapshotSplitProviderTest, GetSplitFromDispatcher) {
@@ -103,7 +100,7 @@ TEST(SnapshotSplitProviderTest, GetSplitFromDispatcher) {
       .WillOnce(DoAll(SetArgReferee<5>(split),
                       SetArgReferee<6>(0),      // local_split_index
                       SetArgReferee<7>(false),  // end_of_splits
-                      Return(absl::OkStatus())));
+                      Return(OkStatus())));
 
   Tensor result;
   bool end_of_splits = false;
@@ -127,7 +124,7 @@ TEST(SnapshotSplitProviderTest, GetSplitFromFile) {
       .WillOnce(DoAll(SetArgReferee<5>(split),
                       SetArgReferee<6>(9),      // local_split_index
                       SetArgReferee<7>(false),  // end_of_splits
-                      Return(absl::OkStatus())));
+                      Return(OkStatus())));
   TF_ASSERT_OK(WriteSplits(snapshot_task, /*num_splits=*/10));
 
   SnapshotSplitProvider split_provider(
@@ -152,7 +149,7 @@ TEST(SnapshotSplitProviderTest, EndOfSplits) {
   EXPECT_CALL(*mock_dispatcher, GetSnapshotSplit(_, _, _, _, _, _, _, _))
       .WillOnce(DoAll(SetArgReferee<6>(0),     // local_split_index
                       SetArgReferee<7>(true),  // end_of_splits
-                      Return(absl::OkStatus())));
+                      Return(OkStatus())));
 
   SnapshotSplitProvider split_provider(
       "worker_address", snapshot_task, /*source_index=*/0,
@@ -174,7 +171,7 @@ TEST(SnapshotSplitProviderTest, SplitNotFound) {
       .WillOnce(DoAll(SetArgReferee<5>(split),
                       SetArgReferee<6>(10),     // local_split_index
                       SetArgReferee<7>(false),  // end_of_splits
-                      Return(absl::OkStatus())));
+                      Return(OkStatus())));
   TF_ASSERT_OK(WriteSplits(snapshot_task, /*num_splits=*/0));
 
   SnapshotSplitProvider split_provider(
@@ -184,7 +181,7 @@ TEST(SnapshotSplitProviderTest, SplitNotFound) {
   Tensor result;
   bool end_of_splits = false;
   EXPECT_THAT(split_provider.GetNext(&result, &end_of_splits),
-              StatusIs(absl::StatusCode::kInternal,
+              StatusIs(error::INTERNAL,
                        HasSubstr("not all splits between [0, 10] are found")));
 }
 

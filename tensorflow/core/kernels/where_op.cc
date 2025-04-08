@@ -25,7 +25,7 @@ limitations under the License.
 
 #include <memory>
 #include <numeric>
-#include "unsupported/Eigen/CXX11/Tensor"  // from @eigen_archive
+#include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
 #include "tensorflow/core/framework/bounds_check.h"
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/register_types.h"
@@ -41,7 +41,7 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/gpu/gpu_event_mgr.h"
 #include "tensorflow/core/util/gpu_solvers.h"
 #if GOOGLE_CUDA
-#include "xla/stream_executor/cuda/cuda_activation.h"
+#include "tensorflow/compiler/xla/stream_executor/cuda/cuda_activation.h"
 using stream_executor::cuda::ScopedActivateExecutorContext;
 #elif TENSORFLOW_USE_ROCM
 #include "tensorflow/core/platform/rocm.h"
@@ -191,8 +191,7 @@ class WhereCPUOp : public OpKernel {
   }
 
  private:
-  WhereCPUOp(const WhereCPUOp&) = delete;
-  void operator=(const WhereCPUOp&) = delete;
+  TF_DISALLOW_COPY_AND_ASSIGN(WhereCPUOp);
 };
 
 #define REGISTER_WHERE_OP(T) \
@@ -358,8 +357,7 @@ class WhereGPUOp : public AsyncOpKernel {
   }
 
  private:
-  WhereGPUOp(const WhereGPUOp&) = delete;
-  void operator=(const WhereGPUOp&) = delete;
+  TF_DISALLOW_COPY_AND_ASSIGN(WhereGPUOp);
 };
 
 #define REGISTER_GPU_WHERE_OP(T) \

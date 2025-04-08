@@ -278,8 +278,7 @@ class TridiagonalSolveOpGpu : public OpKernel {
   }
 
  private:
-  TridiagonalSolveOpGpu(const TridiagonalSolveOpGpu&) = delete;
-  void operator=(const TridiagonalSolveOpGpu&) = delete;
+  TF_DISALLOW_COPY_AND_ASSIGN(TridiagonalSolveOpGpu);
 
   void ComputeWithGtsvBatched(OpKernelContext* context, const Tensor& lhs,
                               const Tensor& rhs, const int batch_size) {

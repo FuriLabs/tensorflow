@@ -356,8 +356,7 @@ class PresizedCuckooMap {
   std::unique_ptr<CuckooPathQueue> cpq_;
   CuckooPathEntry visited_[kVisitedListSize];
 
-  PresizedCuckooMap(const PresizedCuckooMap&) = delete;
-  void operator=(const PresizedCuckooMap&) = delete;
+  TF_DISALLOW_COPY_AND_ASSIGN(PresizedCuckooMap);
 };
 
 }  // namespace tensorflow

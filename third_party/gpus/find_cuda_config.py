@@ -121,7 +121,7 @@ def _at_least_version(actual_version, required_version):
 def _get_header_version(path, name):
   """Returns preprocessor defines in C header file."""
   for line in io.open(path, "r", encoding="utf-8").readlines():
-    match = re.match(r"\s*#\s*define %s\s+(\d+)" % name, line)
+    match = re.match("\s*#\s*define %s\s+(\d+)" % name, line)
     if match:
       return match.group(1)
   return ""
@@ -177,7 +177,6 @@ def _header_paths():
       "extras/CUPTI/include",
       "include/cuda/CUPTI",
       "local/cuda/extras/CUPTI/include",
-      "targets/x86_64-linux/include",
   ]
 
 
@@ -261,7 +260,7 @@ def _find_cuda_config(base_paths, required_version):
   cuda_library_path = _find_library(base_paths, "cudart", cuda_version)
 
   def get_nvcc_version(path):
-    pattern = r"Cuda compilation tools, release \d+\.\d+, V(\d+\.\d+\.\d+)"
+    pattern = "Cuda compilation tools, release \d+\.\d+, V(\d+\.\d+\.\d+)"
     for line in subprocess.check_output([path, "--version"]).splitlines():
       match = re.match(pattern, line.decode("ascii"))
       if match:
@@ -283,7 +282,6 @@ def _find_cuda_config(base_paths, required_version):
   ], "libdevice*.10.bc")
 
   cupti_header_path = _find_file(base_paths, _header_paths(), "cupti.h")
-  nvml_header_dir = _find_file(base_paths, _header_paths(), "nvml.h")
   cupti_library_path = _find_library(base_paths, "cupti", required_version)
 
   cuda_binary_dir = os.path.dirname(nvcc_path)
@@ -308,7 +306,6 @@ def _find_cuda_config(base_paths, required_version):
       "cupti_include_dir": os.path.dirname(cupti_header_path),
       "cupti_library_dir": os.path.dirname(cupti_library_path),
       "cuda_toolkit_path": cuda_toolkit_paths[0],
-      "nvml_header_dir": os.path.dirname(nvml_header_dir),
   }
 
 
@@ -531,7 +528,7 @@ def _find_tensorrt_config(base_paths, required_version):
   library_path = _find_library(base_paths, "nvinfer", tensorrt_version)
 
   return {
-      "tensorrt_version": header_version,
+      "tensorrt_version": tensorrt_version,
       "tensorrt_include_dir": os.path.dirname(header_path),
       "tensorrt_library_dir": os.path.dirname(library_path),
   }
@@ -552,7 +549,7 @@ def _get_legacy_path(env_name, default=[]):
   paths. Detect those and return '/usr', otherwise forward to _list_from_env().
   """
   if env_name in os.environ:
-    match = re.match(r"^(/[^/ ]*)+/lib/\w+-linux-gnu/?$", os.environ[env_name])
+    match = re.match("^(/[^/ ]*)+/lib/\w+-linux-gnu/?$", os.environ[env_name])
     if match:
       return [match.group(1)]
   return _list_from_env(env_name, default)
@@ -577,9 +574,7 @@ def find_cuda_config():
   result = {}
   if "cuda" in libraries:
     cuda_paths = _list_from_env("CUDA_TOOLKIT_PATH", base_paths)
-    res = _find_cuda_config(cuda_paths, cuda_version)
-
-    result.update(res)
+    result.update(_find_cuda_config(cuda_paths, cuda_version))
 
     cuda_version = result["cuda_version"]
     cublas_paths = base_paths

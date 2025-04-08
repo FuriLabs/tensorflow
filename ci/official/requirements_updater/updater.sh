@@ -18,8 +18,6 @@
 # if there is a change in requirements.in then all lock files will be updated
 # accordingly
 
-# All commands run relative to this directory
-cd "$(dirname "${BASH_SOURCE[0]}")"
 
 mv BUILD.bazel BUILD
 

@@ -203,14 +203,6 @@ cuda_header_library(
     deps = [":cuda_headers"],
 )
 
-cuda_header_library(
-    name = "nvml_headers",
-    hdrs = [":nvml"],
-    include_prefix = "third_party/gpus",
-    includes = ["cuda/nvml/include/"],
-    deps = [":cuda_headers"],
-)
-
 cc_library(
     name = "cupti_dsos",
     data = ["cuda/lib/%{cupti_lib}"],

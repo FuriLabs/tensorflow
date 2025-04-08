@@ -49,7 +49,7 @@ limitations under the License.
 #include "tensorflow/core/platform/stack_frame.h"
 #include "tensorflow/core/platform/threadpool_interface.h"
 #include "tensorflow/core/protobuf/config.pb.h"
-#include "tsl/protobuf/error_codes.pb.h"
+#include "tensorflow/tsl/protobuf/error_codes.pb.h"
 #if !defined(IS_MOBILE_PLATFORM)
 #include "tensorflow/core/protobuf/remote_tensor_handle.pb.h"
 #endif  // IS_MOBILE_PLATFORM
@@ -351,8 +351,7 @@ class FunctionCallFrame : public CallFrameInterface {
   };
   gtl::InlinedVector<Retval, 4> rets_;
 
-  FunctionCallFrame(const FunctionCallFrame&) = delete;
-  void operator=(const FunctionCallFrame&) = delete;
+  TF_DISALLOW_COPY_AND_ASSIGN(FunctionCallFrame);
 };
 
 // Map of function names to StackTracesMaps.

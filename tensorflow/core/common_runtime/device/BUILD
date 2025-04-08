@@ -20,7 +20,10 @@ load(
 
 package(
     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    default_visibility = ["//tensorflow:internal"],
+    default_visibility = [
+        "//tensorflow:internal",
+        "//tensorflow_models:__subpackages__",
+    ],
     # features = ["-parse_headers"],
     features = ["-layering_check"],
     licenses = ["notice"],
@@ -35,7 +38,7 @@ cc_library(
     deps = [
         "//tensorflow/core:lib",
         "//tensorflow/core/platform:types",
-        "@local_tsl//tsl/framework:device_id",
+        "//tensorflow/tsl/framework:device_id",
     ] + if_static([
         ":device_id_impl",
     ]),
@@ -51,7 +54,7 @@ cc_library(
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core:lib_internal",
-        "@local_tsl//tsl/framework:device_id_impl",
+        "//tensorflow/tsl/framework:device_id_impl",
     ],
 )
 
@@ -67,11 +70,11 @@ tf_cuda_library(
     visibility = ["//visibility:public"],
     deps = [
         ":device_id",
+        "//tensorflow/compiler/xla/stream_executor:device_mem_allocator",
         "//tensorflow/core:lib",
         "//tensorflow/core:lib_internal",
         "//tensorflow/core/framework:allocator",
         "//tensorflow/core/platform:stream_executor",
-        "@local_xla//xla/stream_executor:device_mem_allocator",
     ],
 )
 
@@ -83,7 +86,7 @@ filegroup(
         "device_id.h",
         "device_id_manager.h",
         "device_mem_allocator.h",
-        "@local_tsl//tsl/framework:device_runtime_headers",
+        "//tensorflow/tsl/framework:device_runtime_headers",
     ],
 )
 
@@ -168,6 +171,6 @@ tf_cuda_cc_test(
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",
         "//tensorflow/core/kernels:cwise_op",
-        "@local_tsl//tsl/framework:device_id",
+        "//tensorflow/tsl/framework:device_id",
     ],
 )
