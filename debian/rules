@@ -20,6 +20,7 @@ override_dh_auto_configure:
 		-DFlatBuffers_DIR=/usr/lib/$(DEB_HOST_MULTIARCH)/cmake/flatbuffers/ \
 		-Dcpuinfo_DIR=/usr/lib/$(DEB_HOST_MULTIARCH)/cmake/cpuinfo/ \
 		-DNEON_2_SSE_DIR=/usr/lib/cmake/NEON_2_SSE/ \
+		-Dfft2d_DIR=/usr/lib/$(DEB_HOST_MULTIARCH)/cmake/fft2d/ \
 		-DSYSTEM_PTHREADPOOL=ON \
 		-DTFLITE_ENABLE_NNAPI=OFF \
 		-DTFLITE_ENABLE_XNNPACK=OFF \
