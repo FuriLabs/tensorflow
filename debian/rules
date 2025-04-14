@@ -2,6 +2,9 @@
 
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
+PATH_DEV_PKG=debian/libtensorflow-lite-dev
+PATH_DEV_HEADERS=${PATH_DEV_PKG}/usr/include/tensorflow
+
 %:
 	dh $@ --sourcedirectory=tensorflow/lite
 
@@ -28,3 +31,12 @@ override_dh_auto_configure:
 		-DTFLITE_ENABLE_RESOURCE=ON \
 		-DTFLITE_ENABLE_RUY=ON \
 		$(NULL)
+
+execute_after_dh_install:
+	install -d ${PATH_DEV_HEADERS}/lite/core/async/interop/c
+	install -d ${PATH_DEV_HEADERS}/lite/profiling/telemetry/c/
+	cp -v tensorflow/lite/core/async/interop/*.h ${PATH_DEV_HEADERS}/lite/core/async/interop/
+	cp -v tensorflow/lite/core/async/interop/c/*.h ${PATH_DEV_HEADERS}/lite/core/async/interop/c/
+	cp -v tensorflow/lite/profiling/*.h ${PATH_DEV_HEADERS}/lite/profiling/
+	cp -v tensorflow/lite/profiling/telemetry/*.h ${PATH_DEV_HEADERS}/lite/profiling/telemetry/
+	cp -v tensorflow/lite/profiling/telemetry/c/*.h ${PATH_DEV_HEADERS}/lite/profiling/telemetry/c/
