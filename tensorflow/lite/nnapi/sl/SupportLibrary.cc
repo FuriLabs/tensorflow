@@ -27,6 +27,8 @@ limitations under the License.
 #include "tensorflow/lite/minimal_logging.h"
 #include "tensorflow/lite/nnapi/NeuralNetworksTypes.h"
 
+#include <hybris/common/dlfcn.h>
+
 namespace tflite {
 namespace nnapi {
 
@@ -34,7 +36,7 @@ using tflite::TFLITE_LOG_ERROR;
 
 std::unique_ptr<const NnApiSupportLibrary> loadNnApiSupportLibrary(
     const std::string& libName) {
-  void* libHandle = dlopen(libName.c_str(), RTLD_LAZY | RTLD_LOCAL);
+  void* libHandle = hybris_dlopen(libName.c_str(), RTLD_LAZY | RTLD_LOCAL);
   if (libHandle == nullptr) {
     TFLITE_LOG(TFLITE_LOG_ERROR, "nnapi error: unable to open library %s: %s",
                libName.c_str(), dlerror());
@@ -43,7 +45,7 @@ std::unique_ptr<const NnApiSupportLibrary> loadNnApiSupportLibrary(
 
   auto result = loadNnApiSupportLibrary(libHandle);
   if (!result) {
-    dlclose(libHandle);
+    hybris_dlclose(libHandle);
   }
   return result;
 }
@@ -52,7 +54,7 @@ std::unique_ptr<const NnApiSupportLibrary> loadNnApiSupportLibrary(
     void* libHandle) {
   NnApiSLDriverImpl* (*getSlDriverImpl)();
   getSlDriverImpl = reinterpret_cast<decltype(getSlDriverImpl)>(
-      dlsym(libHandle, "ANeuralNetworks_getSLDriverImpl"));
+      hybris_dlsym(libHandle, "ANeuralNetworks_getSLDriverImpl"));
   if (getSlDriverImpl == nullptr) {
     TFLITE_LOG(TFLITE_LOG_ERROR,
                "Failed to find ANeuralNetworks_getSLDriverImpl symbol");

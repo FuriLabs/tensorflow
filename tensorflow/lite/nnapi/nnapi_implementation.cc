@@ -30,13 +30,15 @@ limitations under the License.
 #include <sys/system_properties.h>
 #endif  // __ANDROID__
 
+#include <hybris/common/dlfcn.h>
+#include <hybris/properties/properties.h>
+
 #define EXPAND_VA_ARGS(...) , ##__VA_ARGS__
 #define NNAPI_LOG(format, ...) \
-  fprintf(stderr, format "\n" EXPAND_VA_ARGS(__VA_ARGS__));
+  fprintf(stdout, format "\n" EXPAND_VA_ARGS(__VA_ARGS__));
 
 namespace {
 
-#ifdef __ANDROID__
 // See frameworks/base/core/java/android/os/Process.java in AOSP.
 const int kFirstIsolatedUid = 99000;
 const int kLastIsolatedUid = 99999;
@@ -53,7 +55,7 @@ bool IsIsolatedProcess() {
 int32_t GetAndroidSdkVersion() {
   const char* sdkProp = "ro.build.version.sdk";
   char sdkVersion[PROP_VALUE_MAX];
-  int length = __system_property_get(sdkProp, sdkVersion);
+  int length = property_get(sdkProp, sdkVersion, "");
   if (length != 0) {
     int32_t result = 0;
     for (int i = 0; i < length; ++i) {
@@ -68,20 +70,19 @@ int32_t GetAndroidSdkVersion() {
   }
   return 0;
 }
-#endif  // __ANDROID__
 
 void* LoadFunction(void* handle, const char* name, bool optional) {
   if (handle == nullptr) {
     return nullptr;
   }
-  void* fn = dlsym(handle, name);
+  void* fn = hybris_dlsym(handle, name);
   if (fn == nullptr && !optional) {
     NNAPI_LOG("nnapi error: unable to open function %s", name);
   }
   return fn;
 }
 
-#ifndef __ANDROID__
+#if 0
 // Add /dev/shm implementation of shared memory for non-Android platforms
 int ASharedMemory_create(const char* name, size_t size) {
   // Each call to ASharedMemory_create produces a unique memory space, hence
@@ -131,7 +132,7 @@ uint32_t CalculateAndroidSdkVersion(NnApi const& nnapi) {
   }
   return sdk_version;
 }
-#else
+#endif
 
 ASharedMemory_create_fn getASharedMemory_create() {
   // ASharedMemory_create has different implementations in Android depending on
@@ -139,14 +140,14 @@ ASharedMemory_create_fn getASharedMemory_create() {
   // partition (e.g. if a HAL wants to use NNAPI) it is only accessible through
   // libcutils.
   void* libandroid = nullptr;
-  libandroid = dlopen("libandroid.so", RTLD_LAZY | RTLD_LOCAL);
+  libandroid = hybris_dlopen("libandroid.so", RTLD_LAZY | RTLD_LOCAL);
   if (libandroid != nullptr) {
     return reinterpret_cast<ASharedMemory_create_fn>(
         LoadFunction(libandroid, "ASharedMemory_create", false));
   }
 
   std::string libandroid_error = dlerror();
-  void* cutils_handle = dlopen("libcutils.so", RTLD_LAZY | RTLD_LOCAL);
+  void* cutils_handle = hybris_dlopen("libcutils.so", RTLD_LAZY | RTLD_LOCAL);
   if (cutils_handle != nullptr) {
     return reinterpret_cast<ASharedMemory_create_fn>(
         LoadFunction(cutils_handle, "ashmem_create_region", false));
@@ -159,7 +160,6 @@ ASharedMemory_create_fn getASharedMemory_create() {
   return nullptr;
 }
 
-#endif  // __ANDROID__
 
 #define LOAD_FUNCTION(handle, name)         \
   nnapi.name = reinterpret_cast<name##_fn>( \
@@ -176,7 +176,6 @@ const NnApi LoadNnApi() {
   NnApi nnapi = {};
   nnapi.android_sdk_version = 0;
 
-#ifdef __ANDROID__
   nnapi.android_sdk_version = GetAndroidSdkVersion();
   if (nnapi.android_sdk_version < 27) {
     NNAPI_LOG("nnapi error: requires android sdk version to be at least %d",
@@ -191,14 +190,12 @@ const NnApi LoadNnApi() {
     nnapi.nnapi_exists = false;
     return nnapi;
   }
-#endif  // __ANDROID__
 
   void* libneuralnetworks = nullptr;
   // TODO(b/123243014): change RTLD_LOCAL? Assumes there can be multiple
   // instances of nn api RT
   static const char nnapi_library_name[] = "libneuralnetworks.so";
-  libneuralnetworks = dlopen(nnapi_library_name, RTLD_LAZY | RTLD_LOCAL);
-#ifdef __ANDROID__
+  libneuralnetworks = hybris_dlopen(nnapi_library_name, RTLD_LAZY | RTLD_LOCAL);
   // Note: If there is an problem trying to open the NNAPI library on a
   // non-Android system, the error message is suppressed. This is to avoid
   // showing confusing errors when running in environments that do not support
@@ -211,7 +208,6 @@ const NnApi LoadNnApi() {
     }
     NNAPI_LOG("nnapi error: unable to open library %s", nnapi_library_name);
   }
-#endif  // __ANDROID__
 
   nnapi.nnapi_exists = libneuralnetworks != nullptr;
 
@@ -246,9 +242,8 @@ const NnApi LoadNnApi() {
   LOAD_FUNCTION(libneuralnetworks, ANeuralNetworksEvent_wait);
   LOAD_FUNCTION(libneuralnetworks, ANeuralNetworksEvent_free);
 
-#ifdef __ANDROID__
   nnapi.ASharedMemory_create = getASharedMemory_create();
-#else
+#if 0
   // Mock ASharedMemory_create only if libneuralnetworks.so was successfully
   // loaded. This ensures identical behaviour on platforms which use this
   // implementation, but don't have libneuralnetworks.so library, and
@@ -414,7 +409,7 @@ const NnApi LoadNnApi() {
   LOAD_FUNCTION_OPTIONAL(libneuralnetworks,
                          SL_ANeuralNetworksDiagnostic_registerCallbacks);
 
-#ifndef __ANDROID__
+#if 0
   // If libneuralnetworks.so is loaded, but android_sdk_version is not set,
   // then determine android_sdk_version by testing which functions are
   // available.
@@ -479,9 +474,8 @@ std::unique_ptr<const NnApi> CreateNnApiFromSupportLibrary(
   ASSIGN_SL_FUNCTION_TO_NNAPI(ANeuralNetworksEvent_wait);
   ASSIGN_SL_FUNCTION_TO_NNAPI(ANeuralNetworksEvent_free);
 
-#ifdef __ANDROID__
   nnapi->ASharedMemory_create = getASharedMemory_create();
-#else
+#if 0
   nnapi->ASharedMemory_create = ASharedMemory_create;
 #endif  // __ANDROID__
 
