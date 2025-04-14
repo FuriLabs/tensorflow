@@ -28,6 +28,8 @@ OverridableFetchContent_Declare(
   GIT_PROGRESS TRUE
   PREFIX "${CMAKE_BINARY_DIR}"
   SOURCE_DIR "${CMAKE_BINARY_DIR}/fp16_headers"
+  LICENSE_FILE "LICENSE"
+  LICENSE_URL "https://raw.githubusercontent.com/Maratyszcza/FP16/refs/heads/master/LICENSE"
 )
 
 OverridableFetchContent_GetProperties(fp16_headers)
