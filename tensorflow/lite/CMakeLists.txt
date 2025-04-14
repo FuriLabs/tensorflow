@@ -624,6 +624,8 @@ target_link_libraries(tensorflow-lite
     ml_dtypes
     ruy::ruy
     pthreadpool
+    android-properties
+    hybris-common
     ${CMAKE_DL_LIBS}
     ${TFLITE_TARGET_DEPENDENCIES}
 )

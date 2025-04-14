@@ -22,6 +22,10 @@ limitations under the License.
 
 #include "tensorflow/lite/nnapi/NeuralNetworksTypes.h"
 
+#include <hybris/common/dlfcn.h>
+
+#define __ANDROID__ 1
+
 // This interface is now deprecated. You should use instead
 // nnapi_implementation.
 
@@ -43,7 +47,7 @@ inline void* loadLibrary(const char* name) {
   // instances of nn api RT
   void* handle = nullptr;
 #ifdef __ANDROID__
-  handle = dlopen(name, RTLD_LAZY | RTLD_LOCAL);
+  handle = hybris_dlopen(name, RTLD_LAZY | RTLD_LOCAL);
   if (handle == nullptr) {
     NNAPI_LOG("nnapi error: unable to open library %s", name);
   }
@@ -57,7 +61,7 @@ inline int ASharedMemory_create(const char* name, size_t size) {
   static void* handle = loadLibrary("libandroid.so");
   static ASharedMemory_create_fn fn =
       handle != nullptr ? reinterpret_cast<ASharedMemory_create_fn>(
-                              dlsym(handle, "ASharedMemory_create"))
+                              hybris_dlsym(handle, "ASharedMemory_create"))
                         : nullptr;
   int fd = fn != nullptr ? fn(name, size) : -1;
   return fd;
@@ -71,7 +75,7 @@ inline void* getLibraryHandle() {
 inline void* loadFunction(const char* name) {
   void* fn = nullptr;
   if (getLibraryHandle() != nullptr) {
-    fn = dlsym(getLibraryHandle(), name);
+    fn = hybris_dlsym(getLibraryHandle(), name);
   }
   if (fn == nullptr) {
     NNAPI_LOG("nnapi error: unable to open function %s", name);

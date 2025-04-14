@@ -28,6 +28,8 @@ limitations under the License.
 #include "tensorflow/lite/nnapi/NeuralNetworksTypes.h"
 #include "tensorflow/lite/nnapi/sl/public/NeuralNetworksSupportLibraryImpl.h"
 
+#include <hybris/common/dlfcn.h>
+
 namespace tflite {
 namespace nnapi {
 
@@ -57,7 +59,7 @@ struct NnApiSupportLibrary {
   // libHandle): impl(impl), libHandle(libHandle) {}
   ~NnApiSupportLibrary() {
     if (libHandle != nullptr) {
-      dlclose(libHandle);
+      hybris_dlclose(libHandle);
       libHandle = nullptr;
     }
   }

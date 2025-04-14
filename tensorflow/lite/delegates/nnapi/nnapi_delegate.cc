@@ -43,6 +43,11 @@ limitations under the License.
 #include <sys/system_properties.h>
 #endif
 
+#include <hybris/properties/properties.h>
+#define TFLITE_NNAPI_ALLOW_MMAP_SHARING
+#include <sys/mman.h>
+#include <unistd.h>
+
 #if defined __ANDROID__ || defined __unix__
 #define TFLITE_NNAPI_ALLOW_MMAP_SHARING
 #include <sys/mman.h>
@@ -776,9 +781,8 @@ NNMemory::NNMemory(const NnApi* nnapi, const char* name, size_t size) {
   if (name && size > 0) {
     nnapi_ = nnapi;
     byte_size_ = size;
-#ifdef __ANDROID__
     fd_ = nnapi_->ASharedMemory_create(name, size);
-#else
+#if 0
     // For non-Android platforms ASharedMemory_create needs unique name to
     // create a shared memory object (see nnapi_implementation.cc).
     char shm_name_buffer[L_tmpnam];
@@ -812,9 +816,8 @@ NNMemory::~NNMemory() {
   if (nn_memory_handle_) {
     nnapi_->ANeuralNetworksMemory_free(nn_memory_handle_);
   }
-#ifdef __ANDROID__
   if (fd_ >= 0) close(fd_);
-#else
+#if 0
   if (!shm_region_name_.empty()) shm_unlink(shm_region_name_.c_str());
 #endif
 #endif
