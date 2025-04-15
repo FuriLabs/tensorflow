@@ -35,8 +35,10 @@ override_dh_auto_configure:
 execute_after_dh_install:
 	install -d ${PATH_DEV_HEADERS}/lite/core/async/interop/c
 	install -d ${PATH_DEV_HEADERS}/lite/profiling/telemetry/c/
+	install -d ${PATH_DEV_HEADERS}/lite/delegates/nnapi/
 	cp -v tensorflow/lite/core/async/interop/*.h ${PATH_DEV_HEADERS}/lite/core/async/interop/
 	cp -v tensorflow/lite/core/async/interop/c/*.h ${PATH_DEV_HEADERS}/lite/core/async/interop/c/
 	cp -v tensorflow/lite/profiling/*.h ${PATH_DEV_HEADERS}/lite/profiling/
 	cp -v tensorflow/lite/profiling/telemetry/*.h ${PATH_DEV_HEADERS}/lite/profiling/telemetry/
 	cp -v tensorflow/lite/profiling/telemetry/c/*.h ${PATH_DEV_HEADERS}/lite/profiling/telemetry/c/
+	cp -v tensorflow/lite/delegates/nnapi/*.h ${PATH_DEV_HEADERS}/lite/delegates/nnapi/
