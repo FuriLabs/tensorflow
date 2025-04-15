@@ -24,8 +24,9 @@ override_dh_auto_configure:
 		-Dcpuinfo_DIR=/usr/lib/$(DEB_HOST_MULTIARCH)/cmake/cpuinfo/ \
 		-DNEON_2_SSE_DIR=/usr/lib/cmake/NEON_2_SSE/ \
 		-Dfft2d_DIR=/usr/lib/$(DEB_HOST_MULTIARCH)/cmake/fft2d/ \
+		-Dfp16_headers_DIR=/usr/lib/$(DEB_HOST_MULTIARCH)/cmake/fp16/ \
 		-DSYSTEM_PTHREADPOOL=ON \
-		-DTFLITE_ENABLE_NNAPI=OFF \
+		-DTFLITE_ENABLE_NNAPI=ON \
 		-DTFLITE_ENABLE_XNNPACK=OFF \
 		-DTFLITE_ENABLE_GPU=OFF \
 		-DTFLITE_ENABLE_RESOURCE=ON \
