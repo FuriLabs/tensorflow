@@ -1,0 +1,18 @@
+--- a/tensorflow/lite/CMakeLists.txt
++++ b/tensorflow/lite/CMakeLists.txt
+@@ -154,7 +154,6 @@
+   list(APPEND TFLITE_TARGET_DEPENDENCIES NEON_2_SSE::NEON_2_SSE)
+ endif()
+ find_package(cpuinfo REQUIRED)  #CPUINFO is used by XNNPACK and RUY library
+-find_package(ml_dtypes REQUIRED)
+ find_package(ruy REQUIRED)
+ # Download necessary dependencies.
+ # Download pthreadpool source package if it doesn't exist.
+@@ -621,7 +620,6 @@
+     fft2d_fftsg2d
+     flatbuffers::flatbuffers
+     gemmlowp::gemmlowp
+-    ml_dtypes
+     ruy::ruy
+     pthreadpool
+     ${CMAKE_DL_LIBS}

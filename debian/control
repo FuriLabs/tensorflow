@@ -20,7 +20,6 @@ Build-Depends: cmake,
                libpthreadpool-dev,
                libruy-dev (>= 0.0.0~git20230215.21a85fe-2),
                libvulkan-dev,
-               ml-dtypes-dev,
                opencl-c-headers
 Standards-Version: 4.7.0
 Rules-Requires-Root: no
