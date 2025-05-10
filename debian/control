@@ -2,7 +2,7 @@ Source: tensorflow
 Section: science
 Priority: optional
 Maintainer: Debian Deep Learning Team <debian-ai@lists.debian.org>
-Uploaders: Dylan Aïssi <daissi@debian.org>
+Uploaders: Dylan Aïssi <daissi@debian.org>,
            Bardia Moshiri <bardia@furilabs.com>
 Build-Depends: cmake,
                debhelper-compat (= 13),
