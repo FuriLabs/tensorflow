@@ -1,3 +1,8 @@
+Description: Disable fft2d because not in Debian due to license issue.
+ See https://salsa.debian.org/deeplearning-team/oourafft
+Forwarded: not-needed
+Author: Dylan Aïssi <daissi@debian.org>
+
 --- a/tensorflow/lite/CMakeLists.txt
 +++ b/tensorflow/lite/CMakeLists.txt
 @@ -146,7 +146,6 @@
