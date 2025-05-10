@@ -20,7 +20,7 @@ Build-Depends: cmake,
                libruy-dev (>= 0.0.0~git20230215.21a85fe-2),
                libvulkan-dev,
                opencl-c-headers
-Standards-Version: 4.7.0
+Standards-Version: 4.7.2
 Rules-Requires-Root: no
 Vcs-Browser: https://salsa.debian.org/deeplearning-team/tensorflow
 Vcs-Git: https://salsa.debian.org/deeplearning-team/tensorflow.git
