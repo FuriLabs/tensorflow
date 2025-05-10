@@ -5,6 +5,7 @@ Source: https://github.com/tensorflow/tensorflow
 Files-Excluded:
  tensorflow/core/lib/bmp/testdata/lena.bmp
  tensorflow/core/lib/gif/testdata/lena.gif
+ tensorflow/core/lib/png/testdata/lena_*.png
 
 Files:     *
 Copyright: 2015-2020 TensorFlow Authors.
