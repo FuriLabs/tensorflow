@@ -1,4 +1,4 @@
-libtensorflow-lite.so #PACKAGE# #MINVER#
+libtensorflow-lite.so.2.14.1 #PACKAGE# #MINVER#
 * Build-Depends-Package: libtensorflow-lite-dev
  TfLiteAsyncKernelCreate@Base 2.14.1
  TfLiteAsyncKernelDelete@Base 2.14.1

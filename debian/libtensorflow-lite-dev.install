@@ -1,2 +1,3 @@
-/usr/include/tensorflow/*
-/usr/lib/*/cmake/tensorflow-lite*
+/usr/include/tensorflow
+/usr/lib/*/cmake
+/usr/lib/*/libtensorflow-lite.so
