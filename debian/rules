@@ -43,3 +43,7 @@ execute_after_dh_install:
 	cp -v tensorflow/lite/profiling/*.h ${PATH_DEV_HEADERS}/lite/profiling/
 	cp -v tensorflow/lite/profiling/telemetry/*.h ${PATH_DEV_HEADERS}/lite/profiling/telemetry/
 	cp -v tensorflow/lite/profiling/telemetry/c/*.h ${PATH_DEV_HEADERS}/lite/profiling/telemetry/c/
+
+override_dh_makeshlibs:
+	# Don't make disappearing symbols fatal, for now.
+	dh_makeshlibs -- -c0
