@@ -1,4 +1,5 @@
 Description: Set SOVERSION for the shared library tensorflow-lite
+Forwarded: not-needed
 Author: Dylan Aïssi <daissi@debian.org>
 
 --- a/tensorflow/lite/CMakeLists.txt
