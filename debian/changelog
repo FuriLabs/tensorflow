@@ -1,8 +1,10 @@
 tensorflow (2.14.1+dfsg-1) UNRELEASED; urgency=medium
 
   * New upstream version 2.14.1
+      (Closes: #1084624)
   * Drop all packaging parts requiring bazel since this work is stuck for now.
     With the approval of Mo Zhou and Andreas Tille!
+      (Closes: #1005713)
   * Build tensorflow-lite which doesn't require bazel but can be built with
     cmake.
   * Update debian/copyright.
