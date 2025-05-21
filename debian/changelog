@@ -5,6 +5,7 @@ tensorflow (2.14.1+dfsg-1) UNRELEASED; urgency=medium
     With the approval of Mo Zhou and Andreas Tille!
   * Build tensorflow-lite which doesn't require bazel but can be built with
     cmake.
+  * Update debian/copyright.
 
  -- Dylan Aïssi <daissi@debian.org>  Tue, 08 Apr 2025 16:40:32 +0200
 

@@ -3,47 +3,67 @@ Upstream-Name: TensorFlow
 Upstream-Contact: https://github.com/tensorflow/tensorflow/issues
 Source: https://github.com/tensorflow/tensorflow
 Files-Excluded:
- tensorflow/core/lib/bmp/testdata/lena.bmp
- tensorflow/core/lib/gif/testdata/lena.gif
- tensorflow/core/lib/png/testdata/lena_*.png
+    tensorflow/core/lib/bmp/testdata/lena.bmp
+    tensorflow/core/lib/gif/testdata/lena.gif
+    tensorflow/core/lib/png/testdata/lena_*.png
 
 Files:     *
-Copyright: 2015-2020 TensorFlow Authors.
+Copyright: 2015-2023 The TensorFlow Authors.
+           2015-2023, Google LLC.
+License:   Apache-2.0
+
+Files:     tensorflow/compiler/mlir/quantization/stablehlo/*
+Copyright: 2021-2023 The TensorFlow Authors
+           2023, The StableHLO Authors.
+License:   Apache-2.0
+
+Files:     tensorflow/compiler/xla/python/refine_polymorphic_shapes.cc
+           tensorflow/compiler/xla/python/refine_polymorphic_shapes.h
+Copyright: 2023, The JAX Authors.
 License:   Apache-2.0
 
 Files:     tensorflow/lite/java/*
 Copyright: 2013-2018 The Android Open Source Project
-           2016-2018 The TensorFlow Authors
+           2016-2023 The TensorFlow Authors
+           2018-2023 Google LLC
 License:   Apache-2.0
 
-Files:     tensorflow/examples/android/*
-Copyright: 2016 The Android Open Source Project
-           2015-2017 The TensorFlow Authors
+Files:     tensorflow/python/framework/kythe_metadata.proto
+Copyright: 2019 The Kythe Authors
+           2016-2023 The TensorFlow Authors
+License:   Apache-2.0
+
+Files:     tensorflow/tools/toolchains/win/*
+Copyright: 2018-2019, The Bazel Authors.
+           2015-2023 The TensorFlow Authors.
 License:   Apache-2.0
 
 Files:     third_party/*
-Copyright: 2017-2020 The Bazel Authors or 2015-2017 The TensorFlow Authors
+Copyright: 2017-2023 The Bazel Authors
+           2015-2023 The TensorFlow Authors
 Comment:
            bazel files for upstream builds ready for software-to-be-downloaded.
            That download process does not exist in the debian
            build at all. And we don't ship any source tarball with them --
            we either disable that feature, or use the version already
            provided in the archive. Exceptions listed in this file.
+           third_party/eigen3/LICENSE
            third_party/fft2d/LICENSE
            third_party/gpus/crosstool/LICENSE
            third_party/gpus/cuda/LICENSE
-           third_party/hadoop/LICENSE.txt
-           third_party/hexagon/LICENSE
-           third_party/mkl/LICENSE
-           third_party/mkl/MKL_LICENSE
+           third_party/icu/data/LICENSE
            third_party/mkl_dnn/LICENSE
-           third_party/ngraph/NGRAPH_LICENSE
-           third_party/ngraph/LICENSE
            third_party/nccl/LICENSE
+           third_party/py/ml_dtypes/LICENSE
+           third_party/py/non_hermetic/ml_dtypes/LICENSE
            third_party/py/numpy/LICENSE
-           third_party/sycl/sycl/LICENSE.text
            third_party/tensorrt/LICENSE
            are all bare licence texts
+License:   Apache-2.0
+
+Files:     third_party/compute_library/*
+Copyright: 2022-2023, Arm Limited and affiliates.
+           2015-2023 The TensorFlow Authors.
 License:   Apache-2.0
 
 Files:     third_party/eigen3/*
@@ -55,29 +75,49 @@ Copyright: 2014-2015, Benoit Steiner <benoit.steiner.goog@gmail.com>
            2016 Nishant Patil <nishantpatil@google.com>
 License:   MPL-2.0
 
-Files: third_party/icu/data/*
+Files:     third_party/fft2d/*
+Copyright: 1997-2001, Takuya OOURA (email: ooura@kurims.kyoto-u.ac.jp).
+           2015-2023, The TensorFlow Authors.
+License:   Apache-2.0 and oourafft
+
+Files:     third_party/googleapis/*
+Copyright: 2018-2023, Google LLC
+           2015-2023 The TensorFlow Authors.
+License:   Apache-2.0
+
+Files:     third_party/icu/data/*
 Copyright: © 1991-2018 Unicode, Inc. All rights reserved.
 License:   ICU58p
 
-Files:     third_party/hadoop/hdfs.h
-Copyright: 2018 Apache Software Foundation
+Files:     third_party/mkl_dnn/*
+Copyright: 2022-2023, Arm Limited and affiliates.
+           2020-2022, FUJITSU LIMITED
+           2018-2022, Intel Corporation
+           2015-2023 The TensorFlow Authors.
 License:   Apache-2.0
 
-Files:     third_party/toolchains/preconfig/*
-Copyright: 2019 The Bazel Authors
-           2018 The TensorFlow Authors
+Files:     third_party/nccl/*
+Copyright: 2015-2018, NVIDIA CORPORATION.
+           2015-2023 The TensorFlow Authors.
+License:   BSD-3-clause
+
+Files:     third_party/py/ml_dtypes/*
+           third_party/py/non_hermetic/ml_dtypes/*
+Copyright: 2023-2025, ml_dtypes authors
+           2015-2023 The TensorFlow Authors.
 License:   Apache-2.0
+
+Files:     third_party/py/numpy/*
+           third_party/py/non_hermetic/numpy/*
+Copyright: 2005-2019, NumPy Developers.
+           2015-2023 The TensorFlow Authors.
+License:   BSD-3-clause
 
 Files:     debian/*
 Copyright: 2018-2019 Mo Zhou <lumin@debian.org>
            2021 Wookey <wookey@debian.org>
+           2025 Collabora Ltd.
 License:   Expat
-
-Files:     debian/mock_repos/*
-Copyright: 2017-2020, The Bazel Authors
-License:   Apache-2.0
-
-
 
 License: Apache-2.0
  Licensed under the Apache License, Version 2.0 (the "License");
@@ -94,8 +134,6 @@ License: Apache-2.0
  .
  On Debian systems, the complete text of the Apache version 2.0 license
  can be found in "/usr/share/common-licenses/Apache-2.0".
-
-
 
 License: Expat
  Permission is hereby granted, free of charge, to any person obtaining a
@@ -115,8 +153,6 @@ License: Expat
  CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-
 
 License: MPL-2.0
     Mozilla Public License Version 2.0
@@ -493,8 +529,6 @@ License: MPL-2.0
     This Source Code Form is "Incompatible With Secondary Licenses", as
     defined by the Mozilla Public License, v. 2.0.
 
-
-
 License: ICU58p
  COPYRIGHT AND PERMISSION NOTICE (ICU 58 and later)
  .
@@ -529,3 +563,51 @@ License: ICU58p
  shall not be used in advertising or otherwise to promote the sale,
  use or other dealings in these Data Files or Software without prior
  written authorization of the copyright holder.
+
+License: oourafft
+ You may use, copy, modify and distribute this code for any purpose (include
+ commercial use) and without fee. Please refer to this package when you modify
+ this code.
+Comment:
+ As reported in the LICENSE file, fft was originally licensed under the
+ following license:
+ .
+ You may use, copy, modify this code for any purpose and
+ without fee. You may distribute this ORIGINAL package.
+ .
+ However, the original author (Takuya OOURA <ooura@kurims.kyoto-u.ac.jp>) has
+ relicensed it under a more permissive and DFSG-compatible license as specified
+ on the website site https://www.kurims.kyoto-u.ac.jp/~ooura/fft.html. Moreover,
+ this statement has been confirmed by email from
+ Takuya OOURA <ooura@kurims.kyoto-u.ac.jp> saying that we can see the new
+ license in Chrome for example with "chrome://credits/".
+
+License: BSD-3-clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions
+ are met:
+ .
+ 1. Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+ .
+ 2. Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in
+    the documentation and/or other materials provided with the
+    distribution.
+ .
+ 3. Neither the name of the copyright holder nor the names of its
+    contributors may be used to endorse or promote products derived
+    from this software without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ POSSIBILITY OF SUCH DAMAGE.
