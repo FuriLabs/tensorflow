@@ -11,6 +11,7 @@ Build-Depends: cmake,
                libegl-dev,
                libeigen3-dev,
                libfarmhash-dev,
+#              libfft2d-dev,
                libflatbuffers-dev (>= 23.5.26+dfsg-3),
                libfp16-dev,
                libgemmlowp-dev,
@@ -19,7 +20,8 @@ Build-Depends: cmake,
                libpthreadpool-dev,
                libruy-dev (>= 0.0.0~git20230215.21a85fe-2),
                libvulkan-dev,
-               opencl-c-headers
+#              ml-dtypes-dev,
+               opencl-c-headers,
 Standards-Version: 4.7.2
 Rules-Requires-Root: no
 Vcs-Browser: https://salsa.debian.org/deeplearning-team/tensorflow
