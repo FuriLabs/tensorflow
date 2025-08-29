@@ -1,3 +1,2 @@
 disable-ml_dtypes.patch
-disable-fft2.patch
 set-soversion.patch
