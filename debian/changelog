@@ -1,3 +1,9 @@
+tensorflow (2.14.1+dfsg-2) unstable; urgency=medium
+
+  * Upload to unstable.
+
+ -- Dylan Aïssi <daissi@debian.org>  Mon, 01 Sep 2025 21:38:37 +0200
+
 tensorflow (2.14.1+dfsg-1) experimental; urgency=medium
 
   * New upstream version 2.14.1
