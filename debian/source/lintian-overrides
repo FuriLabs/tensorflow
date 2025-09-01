@@ -2,3 +2,5 @@ tensorflow source: source-contains-prebuilt-binary [tensorflow/compiler/aot/code
 tensorflow source: source-contains-prebuilt-java-object [tensorflow/lite/java/demo/gradle/wrapper/gradle-wrapper.jar]
 tensorflow source: source-contains-prebuilt-java-object [tensorflow/lite/java/ovic/demo/gradle/wrapper/gradle-wrapper.jar]
 tensorflow source: debian-watch-does-not-check-openpgp-signature
+# This file format is actually pbtxt, lintian is confused because of the html extension.
+tensorflow source: source-is-missing [tensorflow/core/grappler/costs/graph_properties_testdata/large_graph.pbtxt.html]
