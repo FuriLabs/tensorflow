@@ -210,6 +210,50 @@ libtensorflow-lite.so.2.14.1 #PACKAGE# #MINVER#
  (c++)"TfLiteDelegateFreeBufferHandleInternal(TfLiteContext*, TfLiteDelegate*, int*)@Base" 2.14.1
  (c++)"TfLiteDelegateCopyFromBufferHandleInternal(TfLiteContext*, TfLiteDelegate*, int, TfLiteTensor*)@Base" 2.14.1
  (c++)"guard variable for Eigen::internal::manage_caching_sizes(Eigen::Action, long*, long*, long*)::m_cacheSizes@Base" 2.14.1
+ bitrv208@Base 2.14.1
+ bitrv208neg@Base 2.14.1
+ bitrv216@Base 2.14.1
+ bitrv216neg@Base 2.14.1
+ bitrv2@Base 2.14.1
+ bitrv2conj@Base 2.14.1
+ cdft2d@Base 2.14.1
+ cdft2d_sub@Base 2.14.1
+ cdft@Base 2.14.1
+ cftb040@Base 2.14.1
+ cftb1st@Base 2.14.1
+ cftbsub@Base 2.14.1
+ cftf040@Base 2.14.1
+ cftf081@Base 2.14.1
+ cftf082@Base 2.14.1
+ cftf161@Base 2.14.1
+ cftf162@Base 2.14.1
+ cftf1st@Base 2.14.1
+ cftfsub@Base 2.14.1
+ cftfx41@Base 2.14.1
+ cftleaf@Base 2.14.1
+ cftmdl1@Base 2.14.1
+ cftmdl2@Base 2.14.1
+ cftrec4@Base 2.14.1
+ cfttree@Base 2.14.1
+ cftx020@Base 2.14.1
+ dctsub@Base 2.14.1
+ ddct2d@Base 2.14.1
+ ddct@Base 2.14.1
+ ddst2d@Base 2.14.1
+ ddst@Base 2.14.1
+ ddxt2d_sub@Base 2.14.1
+ dfct@Base 2.14.1
+ dfst@Base 2.14.1
+ dstsub@Base 2.14.1
+ makect@Base 2.14.1
+ makeipt@Base 2.14.1
+ makewt@Base 2.14.1
+ rdft2d@Base 2.14.1
+ rdft2d_sub@Base 2.14.1
+ rdft2dsort@Base 2.14.1
+ rdft@Base 2.14.1
+ rftbsub@Base 2.14.1
+ rftfsub@Base 2.14.1
  (c++)"guard variable for tflite::optimized_ops::ClampWithRangeAndStore(signed char*, __Int8x16_t, uint8x16x2_t)::max_dup@Base" 2.14.1
  (c++)"guard variable for tflite::optimized_ops::ClampWithRangeAndStore(signed char*, __Int8x16_t, uint8x16x2_t)::min_dup@Base" 2.14.1
  (c++)"flatbuffers::FileExists(char const*)@Base" 2.14.1
