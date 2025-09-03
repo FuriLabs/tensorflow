@@ -1,0 +1,3 @@
+Tests: tflite-minimal-example
+Depends: libtensorflow-lite-dev, libffi-dev, build-essential, cmake, wget
+Restrictions: superficial, needs-internet

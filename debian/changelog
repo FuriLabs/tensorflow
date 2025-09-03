@@ -1,3 +1,10 @@
+tensorflow (2.14.1+dfsg-3) UNRELEASED; urgency=medium
+
+  * Add autopkgtest building a simple application using TensorFlow Lite
+    and then executing it on a mobilenet model.
+
+ -- Dylan Aïssi <daissi@debian.org>  Wed, 03 Sep 2025 23:37:29 +0200
+
 tensorflow (2.14.1+dfsg-2) unstable; urgency=medium
 
   * Upload to unstable.

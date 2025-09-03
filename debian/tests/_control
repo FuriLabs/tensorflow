@@ -1,3 +1,0 @@
-Tests: tflite-minimal-example
-Depends: @builddeps@, libffi-dev, cmake
-Restrictions: superficial
