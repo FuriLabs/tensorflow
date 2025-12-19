@@ -6,6 +6,7 @@ Uploaders: Dylan Aïssi <daissi@debian.org>,
            Bardia Moshiri <bardia@furilabs.com>
 Build-Depends: cmake,
                debhelper-compat (= 13),
+               libhybris-dev,
                libabsl-dev,
                libcpuinfo-dev (>= 0.0~git20220617.082deff-2),
                libegl-dev,
