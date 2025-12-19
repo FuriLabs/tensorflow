@@ -18,7 +18,7 @@ override_dh_auto_configure:
 		-DBUILD_SHARED_LIBS=ON \
 		-DTFLITE_ENABLE_INSTALL=ON \
 		-DTFLITE_ENABLE_GPU=OFF \
-		-DTFLITE_ENABLE_NNAPI=OFF \
+		-DTFLITE_ENABLE_NNAPI=ON \
 		-DTFLITE_ENABLE_RESOURCE=ON \
 		-DTFLITE_ENABLE_RUY=ON \
 		-DTFLITE_ENABLE_XNNPACK=OFF \
@@ -30,6 +30,7 @@ override_dh_auto_configure:
 		-DEigen3_DIR=/usr/share/eigen3/cmake/ \
 		-Dfft2d_DIR=/usr/lib/$(DEB_HOST_MULTIARCH)/cmake/fft2d/ \
 		-DFlatBuffers_DIR=/usr/lib/$(DEB_HOST_MULTIARCH)/cmake/flatbuffers/ \
+		-Dfp16_headers_DIR=/usr/lib/$(DEB_HOST_MULTIARCH)/cmake/fp16/ \
 		-DGEMMLOWP_SOURCE_DIR=/usr/include/gemmlowp \
 		-DML_DTYPES_SOURCE_DIR=/usr/include/ml_dtypes \
 		-DNEON_2_SSE_DIR=/usr/lib/cmake/NEON_2_SSE/ \
