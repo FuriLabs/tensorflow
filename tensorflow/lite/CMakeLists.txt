@@ -638,6 +638,9 @@ target_compile_options(tensorflow-lite
 )
 add_library(${PROJECT_NAME}::tensorflowlite ALIAS tensorflow-lite)
 
+# Set soversion
+set_target_properties(tensorflow-lite PROPERTIES VERSION 2.14.1 SOVERSION 2.14.1)
+
 # The install targets.
 if(TFLITE_ENABLE_INSTALL)
   install(
