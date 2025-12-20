@@ -154,7 +154,6 @@ if (NOT CMAKE_SYSTEM_PROCESSOR OR CMAKE_SYSTEM_PROCESSOR MATCHES "x86")
   list(APPEND TFLITE_TARGET_DEPENDENCIES NEON_2_SSE::NEON_2_SSE)
 endif()
 find_package(cpuinfo REQUIRED)  #CPUINFO is used by XNNPACK and RUY library
-find_package(ml_dtypes REQUIRED)
 find_package(ruy REQUIRED)
 # Download necessary dependencies.
 # Download pthreadpool source package if it doesn't exist.
@@ -621,7 +620,6 @@ target_link_libraries(tensorflow-lite
     fft2d_fftsg2d
     flatbuffers::flatbuffers
     gemmlowp::gemmlowp
-    ml_dtypes
     ruy::ruy
     pthreadpool
     android-properties
